@@ -1,0 +1,357 @@
+.page {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+  background: linear-gradient(180deg, var(--page-bg) 0%, color-mix(in srgb, var(--page-bg) 84%, #0b1220) 100%);
+  color: var(--text-primary);
+}
+
+:global(html[data-theme="light"]) .page {
+  background: linear-gradient(180deg, #eef5ff 0%, #e3ebf8 100%);
+}
+
+.hero,
+.toolbar,
+.metrics,
+.panel,
+.footerPanel {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.14);
+}
+
+.hero {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  gap: 18px;
+}
+
+.heroCopy,
+.heroCard,
+.panel,
+.footerPanel,
+.metricCard,
+.gridCard,
+.pointsRow,
+.ruleRow {
+  color: var(--text-primary);
+}
+
+.kicker {
+  display: inline-flex;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--accent-blue);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(2rem, 4.8vw, 3.5rem);
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+}
+
+.subtitle,
+.panelText,
+.heroCardRow span,
+.gridContent span,
+.pointsRow span,
+.ruleRow span {
+  color: var(--text-muted);
+}
+
+.heroCard {
+  padding: 18px;
+  border-radius: 20px;
+  display: grid;
+  gap: 14px;
+  background: color-mix(in srgb, var(--surface) 72%, var(--surface-strong));
+  border: 1px solid rgba(96, 165, 250, 0.18);
+}
+
+.heroCardRow {
+  display: grid;
+  gap: 6px;
+}
+
+.heroCardRow strong {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.toolbar {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.field select {
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--surface-strong) 58%, var(--text-muted));
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 14px;
+  outline: none;
+}
+
+:global(html[data-theme="light"]) .field select {
+  background: #ffffff;
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.generateButton {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent-blue), #2563eb);
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28);
+}
+
+.generateButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.metrics {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metricCard {
+  padding: 16px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 76%, var(--surface-strong));
+  border: 1px solid rgba(96, 165, 250, 0.14);
+  display: grid;
+  gap: 6px;
+}
+
+.metricCard span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.metricCard strong {
+  font-size: 1.6rem;
+}
+
+.mainGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
+}
+
+.panel {
+  padding: 20px;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.panelTitle {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+}
+
+.statusPill {
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-blue) 18%, var(--surface-strong));
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.emptyState {
+  padding: 24px 0;
+  color: var(--text-muted);
+}
+
+.gridList,
+.pointsList,
+.ruleList,
+.previewChips {
+  display: grid;
+  gap: 12px;
+}
+
+.gridCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: color-mix(in srgb, var(--surface) 72%, var(--surface-strong));
+}
+
+.gridPosition {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: #fff;
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+}
+
+.gridContent {
+  display: grid;
+  gap: 5px;
+  align-content: center;
+}
+
+.gridContent strong,
+.pointsRow strong,
+.ruleRow strong {
+  font-size: 0.98rem;
+}
+
+.gridScore {
+  text-align: right;
+  display: grid;
+  gap: 4px;
+  align-content: center;
+}
+
+.gridScore span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sideStack {
+  display: grid;
+  gap: 20px;
+}
+
+.pointsRow,
+.ruleRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 72%, var(--surface-strong));
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.pointsRow {
+  flex-wrap: wrap;
+}
+
+.pointsRow div,
+.ruleRow div {
+  display: grid;
+  gap: 4px;
+}
+
+.ruleRow strong {
+  text-align: right;
+}
+
+.footerPanel {
+  padding: 20px;
+}
+
+.previewChips {
+  margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.previewChip {
+  padding: 12px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 72%, var(--surface));
+  color: var(--text-primary);
+  font-weight: 800;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+@media (max-width: 1100px) {
+  .toolbar,
+  .metrics,
+  .hero,
+  .mainGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .panelHeader,
+  .gridCard,
+  .pointsRow,
+  .ruleRow {
+    grid-template-columns: 1fr;
+  }
+
+  .generateButton {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 16px;
+  }
+
+  .panel,
+  .hero,
+  .toolbar,
+  .metrics,
+  .footerPanel {
+    border-radius: 20px;
+  }
+
+  .gridPosition {
+    width: 46px;
+    height: 46px;
+  }
+
+  .gridCard {
+    grid-template-columns: 1fr;
+  }
+
+  .gridScore {
+    text-align: left;
+  }
+}

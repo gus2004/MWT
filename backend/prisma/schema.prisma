@@ -1,0 +1,691 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------------------
+// BLOQUE 1: SEGURIDAD, AUTENTICACIÓN Y ROLES
+// -------------------------------------------------------------------------
+
+model Usuario {
+  id              String          @id @default(uuid())
+  email           String          @unique
+  password        String
+  nombre          String
+  apellido        String
+  esta_activo     Boolean         @default(true)
+  ultimo_login    DateTime?
+  fecha_creacion  DateTime        @default(now())
+  fecha_cambio_pw DateTime        @updatedAt
+
+  roles              UsuarioRol[]
+  perfil_piloto      PerfilPiloto?
+  perfil_personal    PerfilPersonal?
+  logs_acceso        LogAcceso[]
+  auditorias         Auditoria[]          @relation("UsuarioAuditor")
+  notificaciones     Notificacion[]
+  revisiones         RevisionTecnica[]
+  sanciones          Sancion[]
+  sesiones           Sesion[]
+  tokens_recuperacion TokenRecuperacion[]
+  reportes           ReporteGenerado[]
+  apelaciones        Apelacion[]          @relation("ComisarioApelacion")
+  apelaciones_piloto Apelacion[]          @relation("PilotoApelacion")
+
+  @@map("usuarios")
+}
+
+model Rol {
+  id          String       @id @default(uuid())
+  nombre      String       @unique
+  descripcion String?
+  usuarios    UsuarioRol[]
+  permisos    RolPermiso[]
+
+  @@map("roles")
+}
+
+model UsuarioRol {
+  usuario_id String
+  rol_id     String
+  usuario    Usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  rol        Rol     @relation(fields: [rol_id], references: [id], onDelete: Cascade)
+
+  @@id([usuario_id, rol_id])
+  @@map("usuarios_roles")
+}
+
+model Permiso {
+  id          String       @id @default(uuid())
+  clave       String       @unique
+  descripcion String?
+  roles       RolPermiso[]
+
+  @@map("permisos")
+}
+
+model RolPermiso {
+  rol_id     String
+  permiso_id String
+  rol        Rol     @relation(fields: [rol_id], references: [id], onDelete: Cascade)
+  permiso    Permiso @relation(fields: [permiso_id], references: [id], onDelete: Cascade)
+
+  @@id([rol_id, permiso_id])
+  @@map("roles_permisos")
+}
+
+model LogAcceso {
+  id         String   @id @default(uuid())
+  usuario_id String
+  ip_address String?
+  user_agent String?
+  fecha      DateTime @default(now())
+  usuario    Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@map("logs_acceso")
+}
+
+model Sesion {
+  id         String   @id @default(uuid())
+  usuario_id String
+  token      String   @unique
+  ip_address String?
+  user_agent String?
+  expira_en  DateTime
+  creada_en  DateTime @default(now())
+  usuario    Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@map("sesiones")
+}
+
+model TokenRecuperacion {
+  id         String   @id @default(uuid())
+  usuario_id String
+  token      String   @unique
+  expira_en  DateTime
+  usado      Boolean  @default(false)
+  creado_en  DateTime @default(now())
+  usuario    Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@map("tokens_recuperacion")
+}
+
+// -------------------------------------------------------------------------
+// BLOQUE 2: PERFILES, DATOS MÉDICOS Y CONTACTO
+// -------------------------------------------------------------------------
+
+model PerfilPersonal {
+  id                String    @id @default(uuid())
+  usuario_id        String    @unique
+  cui               String?   @unique
+  fecha_nacimiento  DateTime?
+  genero            String?
+  telefono_personal String?
+  direccion         String?
+  usuario           Usuario      @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@map("perfiles_personales")
+}
+
+model PerfilPiloto {
+  id                         String        @id @default(uuid())
+  usuario_id                 String        @unique
+  dorsal_preferido           Int?
+  tipo_sangre                String?
+  alergias                   String?
+  condiciones_medicas        String?
+  nombre_contacto_emergencia String?
+  parentesco_emergencia      String?
+  telefono_emergencia        String?
+  seguro_medico_empresa      String?
+  poliza_seguro              String?
+  licencia_federacion        String?
+  usuario                    Usuario       @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  motocicletas               Motocicleta[]
+  inscripciones              Inscripcion[]
+  clasificaciones            ClasificacionGeneral[]
+
+  @@map("perfiles_pilotos")
+}
+
+model Motocicleta {
+  id              String            @id @default(uuid())
+  piloto_id       String
+  marca_id        String
+  modelo          String
+  anio            Int
+  cilindrada_real Int
+  vin             String?           @unique
+  color           String?
+  apodo_moto      String?
+  piloto          PerfilPiloto      @relation(fields: [piloto_id], references: [id])
+  marca           MarcaMoto         @relation(fields: [marca_id], references: [id])
+  revisiones      RevisionTecnica[]
+  inscripciones   Inscripcion[]
+  historial_inscripciones InscripcionMotocicleta[]
+
+  @@map("motocicletas")
+}
+
+model MarcaMoto {
+  id           String        @id @default(uuid())
+  nombre       String        @unique
+  motocicletas Motocicleta[]
+
+  @@map("marcas_motos")
+}
+
+// -------------------------------------------------------------------------
+// BLOQUE 3: MANTENIMIENTO DE CARRERAS Y CONFIGURACIÓN
+// -------------------------------------------------------------------------
+
+model Circuito {
+  id            String   @id @default(uuid())
+  nombre        String   @unique
+  ubicacion_url String?
+  longitud_km   Float?
+  numero_curvas Int?
+  foto_mapa_url String?
+  esta_activo   Boolean  @default(true)
+  eventos       Evento[]
+
+  @@map("circuitos")
+}
+
+model Campeonato {
+  id           String         @id @default(uuid())
+  nombre       String
+  anio         Int
+  descripcion  String?
+  esta_activo  Boolean        @default(true)
+  eventos      Evento[]
+  categorias   Categoria[]
+  patrocinadores PatrocinadorCampeonato[]
+
+  @@map("campeonatos")
+}
+
+model Categoria {
+  id                 String          @id @default(uuid())
+  campeonato_id      String
+  nombre             String
+  cilindrada_min     Int
+  cilindrada_max     Int
+  descripcion        String?
+  precio_inscripcion Float           @default(0.0)
+  campeonato         Campeonato      @relation(fields: [campeonato_id], references: [id])
+  reglamento         Reglamento?
+  esquema_puntos     EsquemaPuntos[]
+  inscripciones      Inscripcion[]
+  heats              Heat[]
+  clasificaciones    ClasificacionGeneral[]
+  categorias_en_grupo CategoriaEnGrupo[]
+
+  @@map("categorias")
+}
+
+model Reglamento {
+  id                   String    @id @default(uuid())
+  categoria_id         String    @unique
+  archivo_url          String
+  version              String
+  ultima_actualizacion DateTime  @default(now())
+  categoria            Categoria @relation(fields: [categoria_id], references: [id], onDelete: Cascade)
+
+  @@map("reglamentos")
+}
+
+model EsquemaPuntos {
+  id           String    @id @default(uuid())
+  categoria_id String
+  posicion     Int
+  puntos       Int
+  categoria    Categoria @relation(fields: [categoria_id], references: [id], onDelete: Cascade)
+
+  @@map("esquemas_puntos")
+}
+
+// -------------------------------------------------------------------------
+// BLOQUE 5: EVENTOS, CRONOGRAMA E INSCRIPCIONES
+// -------------------------------------------------------------------------
+
+model Evento {
+  id             String                @id @default(uuid())
+  campeonato_id  String
+  circuito_id    String
+  nombre         String
+  fecha_inicio   DateTime
+  fecha_fin      DateTime
+  estado         EstadoEvento          @default(BORRADOR)
+  visible_portada Boolean               @default(false)
+  costo_base     Float                 @default(0.0)
+  campeonato     Campeonato            @relation(fields: [campeonato_id], references: [id])
+  circuito       Circuito              @relation(fields: [circuito_id], references: [id])
+  cronograma     ActividadCronograma[]
+  inscripciones  Inscripcion[]
+  notificaciones Notificacion[]
+  documentos     DocumentoEvento[]
+  galeria        GaleriaFoto[]
+  patrocinadores PatrocinadorEvento[]
+  config_pago    ConfiguracionPago?
+  grupos_categoria GrupoCategoriaEvento[]
+
+  @@map("eventos")
+}
+
+enum EstadoEvento {
+  BORRADOR
+  ABIERTO
+  EN_CURSO
+  FINALIZADO
+  CANCELADO
+}
+
+model ActividadCronograma {
+  id          String   @id @default(uuid())
+  evento_id   String
+  nombre      String
+  hora_inicio DateTime
+  hora_fin    DateTime
+  descripcion String?
+  es_pista    Boolean  @default(false)
+  evento      Evento   @relation(fields: [evento_id], references: [id], onDelete: Cascade)
+
+  @@map("actividades_cronograma")
+}
+
+model Inscripcion {
+  id               String            @id @default(uuid())
+  evento_id        String
+  piloto_id        String
+  categoria_id     String
+  motocicleta_id   String
+  fecha_registro   DateTime          @default(now())
+  estado           EstadoInscripcion @default(PENDIENTE)
+  dorsal_asignado  Int
+  evento           Evento            @relation(fields: [evento_id], references: [id])
+  piloto           PerfilPiloto      @relation(fields: [piloto_id], references: [id])
+  categoria        Categoria         @relation(fields: [categoria_id], references: [id])
+  motocicleta      Motocicleta       @relation(fields: [motocicleta_id], references: [id])
+  pago             Pago?
+  revision_tecnica RevisionTecnica?
+  sanciones        Sancion[]
+  historial_motocicletas InscripcionMotocicleta[]
+  resultados       ResultadoTiempo[]
+  apelaciones      Apelacion[]
+  accesos_doc      AccesoDocumento[]
+
+  @@map("inscripciones")
+}
+
+model InscripcionMotocicleta {
+  id               String       @id @default(uuid())
+  inscripcion_id   String
+  motocicleta_id   String
+  fecha_asignacion DateTime     @default(now())
+  observacion      String?
+  inscripcion      Inscripcion  @relation(fields: [inscripcion_id], references: [id], onDelete: Cascade)
+  motocicleta      Motocicleta  @relation(fields: [motocicleta_id], references: [id])
+
+  @@map("inscripciones_motocicletas")
+}
+
+enum EstadoInscripcion {
+  PENDIENTE
+  PAGADA
+  VALIDADA
+  RECHAZADA
+}
+
+model Pago {
+  id                String      @id @default(uuid())
+  inscripcion_id    String      @unique
+  monto             Float
+  metodo_pago       String
+  id_transaccion    String      @unique
+  fecha_pago        DateTime    @default(now())
+  estado_pago       String
+  moneda            String      @default("GTQ")
+  nit_factura       String?
+  nombre_factura    String?
+  direccion_factura String?
+  inscripcion       Inscripcion @relation(fields: [inscripcion_id], references: [id])
+
+  @@map("pagos")
+}
+
+model ConfiguracionPago {
+  id               String  @id @default(uuid())
+  evento_id        String  @unique
+  proveedor        String  // STRIPE, PAYPAL, TRANSFERENCIA
+  clave_publica    String?
+  clave_privada    String?
+  webhook_secret   String?
+  esta_activo      Boolean @default(true)
+  evento           Evento  @relation(fields: [evento_id], references: [id], onDelete: Cascade)
+
+  @@map("configuraciones_pago")
+}
+
+// -------------------------------------------------------------------------
+// BLOQUE 6: COMISARÍA, REVISIÓN TÉCNICA Y RESULTADOS
+// -------------------------------------------------------------------------
+
+model RevisionTecnica {
+  id             String            @id @default(uuid())
+  inscripcion_id String            @unique
+  usuario_id     String
+  motocicleta_id String?
+  fecha_revision DateTime          @default(now())
+  estado         EstadoRevision    @default(PENDIENTE)
+  observaciones  String?
+  inscripcion    Inscripcion       @relation(fields: [inscripcion_id], references: [id])
+  comisario      Usuario           @relation(fields: [usuario_id], references: [id])
+  motocicleta    Motocicleta?      @relation(fields: [motocicleta_id], references: [id])
+  detalles       DetalleRevision[]
+
+  @@map("revisiones_tecnicas")
+}
+
+enum EstadoRevision {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  CONDICIONAL
+}
+
+model ItemChecklist {
+  id          String            @id @default(uuid())
+  nombre      String
+  descripcion String?
+  detalles    DetalleRevision[]
+
+  @@map("items_checklist")
+}
+
+model DetalleRevision {
+  id                  String          @id @default(uuid())
+  revision_tecnica_id String
+  item_id             String
+  esta_bien           Boolean         @default(false)
+  comentario          String?
+  revision            RevisionTecnica @relation(fields: [revision_tecnica_id], references: [id], onDelete: Cascade)
+  item                ItemChecklist   @relation(fields: [item_id], references: [id])
+
+  @@map("detalles_revision")
+}
+
+model TipoSancion {
+  id          String    @id @default(uuid())
+  nombre      String    @unique
+  descripcion String?
+  sanciones   Sancion[]
+
+  @@map("tipos_sancion")
+}
+
+model Sancion {
+  id              String      @id @default(uuid())
+  inscripcion_id  String
+  comisario_id    String
+  tipo_sancion_id String?
+  motivo          String
+  gravedad        String
+  penalizacion    String
+  fecha_sancion   DateTime    @default(now())
+  inscripcion     Inscripcion @relation(fields: [inscripcion_id], references: [id])
+  comisario       Usuario     @relation(fields: [comisario_id], references: [id])
+  tipo_sancion    TipoSancion? @relation(fields: [tipo_sancion_id], references: [id])
+  apelacion       Apelacion?
+
+  @@map("sanciones")
+}
+
+model Apelacion {
+  id           String   @id @default(uuid())
+  sancion_id   String   @unique
+  piloto_id    String
+  comisario_id String?
+  motivo       String
+  estado       String   @default("PENDIENTE") // PENDIENTE, ACEPTADA, RECHAZADA
+  resolucion   String?
+  fecha        DateTime @default(now())
+  inscripcion_id String
+  sancion      Sancion  @relation(fields: [sancion_id], references: [id])
+  piloto       Usuario  @relation("PilotoApelacion", fields: [piloto_id], references: [id])
+  comisario    Usuario? @relation("ComisarioApelacion", fields: [comisario_id], references: [id])
+  inscripcion  Inscripcion @relation(fields: [inscripcion_id], references: [id])
+
+  @@map("apelaciones")
+}
+
+model Heat {
+  id           String            @id @default(uuid())
+  categoria_id String
+  nombre       String
+  vueltas      Int
+  esta_activo  Boolean           @default(false)
+  categoria    Categoria         @relation(fields: [categoria_id], references: [id])
+  resultados   ResultadoTiempo[]
+  comentarios  ComentarioResultado[]
+
+  @@map("heats")
+}
+
+model ResultadoTiempo {
+  id              String      @id @default(uuid())
+  heat_id         String
+  inscripcion_id  String
+  posicion        Int
+  mejor_vuelta    String?
+  tiempo_total    String?
+  vuelta_1  String?
+  vuelta_2  String?
+  puntos_ganados  Int         @default(0)
+  estatus_carrera String      @default("FIN")
+  heat            Heat        @relation(fields: [heat_id], references: [id])
+  inscripcion     Inscripcion @relation(fields: [inscripcion_id], references: [id])
+
+  @@map("resultados_tiempos")
+}
+
+model ComentarioResultado {
+  id          String   @id @default(uuid())
+  heat_id     String
+  comentario  String
+  autor       String
+  fecha       DateTime @default(now())
+  heat        Heat     @relation(fields: [heat_id], references: [id], onDelete: Cascade)
+
+  @@map("comentarios_resultado")
+}
+
+model ClasificacionGeneral {
+  id            String    @id @default(uuid())
+  piloto_id     String
+  categoria_id  String
+  campeonato_id String
+  puntos_total  Int       @default(0)
+  posicion      Int?
+  actualizado_en DateTime @updatedAt
+  piloto        PerfilPiloto @relation(fields: [piloto_id], references: [id])
+  categoria     Categoria    @relation(fields: [categoria_id], references: [id])
+
+  @@unique([piloto_id, categoria_id, campeonato_id])
+  @@map("clasificaciones_generales")
+}
+
+// -------------------------------------------------------------------------
+// BLOQUE 7: PATROCINADORES
+// -------------------------------------------------------------------------
+
+model Patrocinador {
+  id          String                   @id @default(uuid())
+  nombre      String                   @unique
+  logo_url    String?
+  sitio_web   String?
+  contacto    String?
+  campeonatos PatrocinadorCampeonato[]
+  eventos     PatrocinadorEvento[]
+
+  @@map("patrocinadores")
+}
+
+model PatrocinadorCampeonato {
+  patrocinador_id String
+  campeonato_id   String
+  nivel           String?  // ORO, PLATA, BRONCE
+  patrocinador    Patrocinador @relation(fields: [patrocinador_id], references: [id])
+  campeonato      Campeonato   @relation(fields: [campeonato_id], references: [id])
+
+  @@id([patrocinador_id, campeonato_id])
+  @@map("patrocinadores_campeonatos")
+}
+
+model PatrocinadorEvento {
+  patrocinador_id String
+  evento_id       String
+  nivel           String?
+  patrocinador    Patrocinador @relation(fields: [patrocinador_id], references: [id])
+  evento          Evento       @relation(fields: [evento_id], references: [id])
+
+  @@id([patrocinador_id, evento_id])
+  @@map("patrocinadores_eventos")
+}
+
+// -------------------------------------------------------------------------
+// BLOQUE 8: AUDITORÍA, NOTIFICACIONES, MULTIMEDIA Y CONFIGURACIÓN
+// -------------------------------------------------------------------------
+
+model Auditoria {
+  id             String   @id @default(uuid())
+  usuario_id     String?
+  tabla_afectada String
+  registro_id    String
+  accion         String
+  valor_anterior Json?
+  valor_nuevo    Json?
+  fecha          DateTime @default(now())
+  ip_direccion   String?
+  usuario        Usuario? @relation("UsuarioAuditor", fields: [usuario_id], references: [id])
+
+  @@map("auditoria_logs")
+}
+
+model PlantillaNotificacion {
+  id          String  @id @default(uuid())
+  clave       String  @unique
+  titulo      String
+  cuerpo      String
+  tipo        String
+  descripcion String?
+
+  @@map("plantillas_notificacion")
+}
+
+model Notificacion {
+  id          String   @id @default(uuid())
+  usuario_id  String?
+  evento_id   String?
+  titulo      String
+  mensaje     String
+  tipo        String
+  leida       Boolean  @default(false)
+  fecha_envio DateTime @default(now())
+  usuario     Usuario? @relation(fields: [usuario_id], references: [id])
+  evento      Evento?  @relation(fields: [evento_id], references: [id])
+
+  @@map("notificaciones")
+}
+
+model PreferenciaSistema {
+  id          String  @id @default(uuid())
+  clave       String  @unique
+  valor       String
+  descripcion String?
+
+  @@map("preferencias_sistema")
+}
+
+model DocumentoEvento {
+  id             String            @id @default(uuid())
+  evento_id      String
+  nombre         String
+  archivo_url    String
+  es_obligatorio Boolean           @default(false)
+  evento         Evento            @relation(fields: [evento_id], references: [id])
+  accesos        AccesoDocumento[]
+
+  @@map("documentos_evento")
+}
+
+model AccesoDocumento {
+  id             String          @id @default(uuid())
+  documento_id   String
+  inscripcion_id String
+  fecha_acceso   DateTime        @default(now())
+  documento      DocumentoEvento @relation(fields: [documento_id], references: [id])
+  inscripcion    Inscripcion     @relation(fields: [inscripcion_id], references: [id])
+
+  @@map("accesos_documento")
+}
+
+model GaleriaFoto {
+  id          String   @id @default(uuid())
+  evento_id   String
+  url         String
+  descripcion String?
+  subida_en   DateTime @default(now())
+  evento      Evento   @relation(fields: [evento_id], references: [id], onDelete: Cascade)
+
+  @@map("galeria_fotos")
+}
+
+model ReporteGenerado {
+  id           String   @id @default(uuid())
+  usuario_id   String
+  tipo         String
+  archivo_url  String
+  generado_en  DateTime @default(now())
+  usuario      Usuario  @relation(fields: [usuario_id], references: [id])
+
+  @@map("reportes_generados")
+}
+
+// -------------------------------------------------------------------------
+// GRUPOS DE CATEGORÍA POR EVENTO
+// -------------------------------------------------------------------------
+
+model GrupoCategoriaEvento {
+  id                        String   @id @default(uuid())
+  evento_id                 String
+  nombre                    String
+  descripcion               String?
+  tiene_clasificacion       Boolean  @default(false)
+  clasificacion_completada  Boolean  @default(false)
+  heat1_completado          Boolean  @default(false)
+  heat2_completado          Boolean  @default(false)
+  orden                     Int      @default(1)
+  creado_en                 DateTime @default(now())
+
+  evento                    Evento   @relation(fields: [evento_id], references: [id], onDelete: Cascade)
+  categorias_en_grupo       CategoriaEnGrupo[]
+
+  @@map("grupos_categoria_evento")
+}
+
+model CategoriaEnGrupo {
+  id          String @id @default(uuid())
+  grupo_id    String
+  categoria_id String
+
+  grupo       GrupoCategoriaEvento @relation(fields: [grupo_id], references: [id], onDelete: Cascade)
+  categoria   Categoria            @relation(fields: [categoria_id], references: [id])
+
+  @@unique([grupo_id, categoria_id])
+  @@map("categorias_en_grupo")
+}

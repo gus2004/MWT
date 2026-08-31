@@ -1,0 +1,21 @@
+{
+  "name": "mwt-prototipo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "concurrently -k -n BACK,FRONT -c yellow,cyan \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "dev": "npm run start",
+    "xlsx-to-json": "node ./scripts/xlsx-to-json.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@tanstack/react-query": "^5.90.21",
+    "axios": "^1.13.6",
+    "react-hook-form": "^7.71.2",
+    "xlsx": "^0.18.5",
+    "zod": "^4.3.6"
+  }
+}
