@@ -121,6 +121,21 @@
   border-color: rgba(148, 163, 184, 0.5);
 }
 
+.fieldInput {
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--surface-strong) 58%, var(--text-muted));
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  padding: 0 14px;
+  outline: none;
+}
+
+:global(html[data-theme="light"]) .fieldInput {
+  background: #ffffff;
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
 .generateButton {
   min-height: 48px;
   padding: 0 18px;
@@ -205,6 +220,264 @@
   color: var(--text-muted);
 }
 
+.finalPreview {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid rgba(14, 165, 164, 0.3);
+  border-radius: 14px;
+  background: rgba(14, 165, 164, 0.05);
+}
+
+.finalPreview h3,
+.finalPreview p {
+  margin: 0;
+}
+
+.finalPreview p {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.finalPreviewRow {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: var(--surface-strong);
+}
+
+.noticeStack {
+  display: grid;
+  gap: 10px;
+}
+
+.noticeSuccess,
+.noticeWarning {
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.noticeSuccess {
+  color: #047857;
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+}
+
+.noticeWarning {
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+}
+
+.heatTabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.heatTab,
+.heatTabActive {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.heatTabActive {
+  color: #fff;
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.heatTab:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.heatMeta,
+.heatActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.heatMeta strong {
+  color: var(--text-primary);
+}
+
+.addPilotBar {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px dashed rgba(14, 165, 164, 0.45);
+  border-radius: 14px;
+  background: rgba(14, 165, 164, 0.06);
+}
+
+.addPilotBar span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.addPilotSelect {
+  min-width: 0;
+}
+
+.gridContent small {
+  color: #0369a1;
+  font-weight: 800;
+}
+
+.heatInputs {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.heatInputs input {
+  width: 116px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+}
+
+.removeButton,
+.cancelButton {
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #fda4af;
+  border-radius: 10px;
+  background: #fff1f2;
+  color: #be123c;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.clearButton {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #b45309;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.clearButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.rowControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.dorsalInput {
+  width: 64px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid rgba(14, 165, 164, 0.45);
+  border-radius: 9px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font-weight: 900;
+  text-align: center;
+}
+
+.orderButton {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 9px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.orderButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.dragHint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px dashed rgba(14, 165, 164, 0.45);
+  border-radius: 9px;
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 900;
+  cursor: grab;
+}
+
+.heatActions {
+  align-items: center;
+  padding-top: 6px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.confirmModal {
+  width: min(100%, 520px);
+  padding: 24px;
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: 0 24px 80px rgba(2, 6, 23, 0.3);
+}
+
+.confirmModal h2 {
+  margin: 0 0 8px;
+}
+
+.confirmModal p {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .gridList,
 .pointsList,
 .ruleList,
@@ -251,6 +524,13 @@
   display: grid;
   gap: 4px;
   align-content: center;
+}
+
+.gridScore span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .gridScore span {
@@ -349,6 +629,25 @@
 
   .gridCard {
     grid-template-columns: 1fr;
+  }
+
+  .heatInputs,
+  .rowControls,
+  .heatActions,
+  .heatMeta,
+  .addPilotBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .addPilotBar {
+    display: flex;
+  }
+
+  .heatInputs input,
+  .removeButton,
+  .heatActions button {
+    width: 100%;
   }
 
   .gridScore {

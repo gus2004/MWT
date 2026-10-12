@@ -1,0 +1,65 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}{\f1 Arial;}}
+\fs32\b Guion de evidencia - Sistema MWT\b0\fs24\par
+\par
+\b Objetivo del video\b0\par
+En este video se presenta el funcionamiento de los tres modulos principales del sistema MWT: seguridad de usuarios, inscripciones y competencia. Tambien se muestran tres casos completos, el seguimiento de cada proceso y las tablas de base de datos afectadas.\par
+\par
+\b 1. Seguridad de usuarios\b0\par
+El usuario ingresa con correo y contrasena. El sistema valida la existencia de la cuenta, su estado activo, el token de autenticacion y los roles asignados. Los permisos determinan las acciones disponibles para administradores, staff, comisarios y jueces de mesa. Las operaciones importantes quedan registradas en auditoria.\par
+\par
+Tablas relacionadas: usuarios, roles, usuarios_roles, auditoria_logs y notificaciones.\par
+\par
+\b 2. Modulo de inscripciones\b0\par
+El flujo es: seleccionar evento, categoria, piloto, motocicleta, dorsal y estado; despues se guarda la inscripcion. El sistema valida que el piloto exista, que la motocicleta corresponda al piloto, que el dorsal este disponible y que no exista una inscripcion duplicada.\par
+\par
+El listado permite buscar, filtrar por estado, evento, categoria y dorsal, paginar y ordenar ascendente o descendentemente por piloto, evento, categoria, dorsal, estado y fecha. Tambien permite actualizar, eliminar, consultar informacion del piloto, generar comprobantes y exportar reportes PDF o CSV.\par
+\par
+Tablas relacionadas: inscripciones, eventos, categorias, campeonatos, perfiles_pilotos, usuarios, motocicletas, marcas, pagos, revisiones_tecnicas, inscripciones_motocicletas y auditoria_logs.\par
+\par
+\b Caso 1 - Inscripcion pendiente\b0\par
+1. Entrar a Dashboard / Inscripciones.\par
+2. Seleccionar Inscribir pilotos.\par
+3. Elegir evento, categoria, piloto, motocicleta y dorsal.\par
+4. Dejar el estado como PENDIENTE.\par
+5. Guardar y mostrar el comprobante.\par
+6. Buscar el registro en el listado.\par
+7. Revisar el registro en la tabla inscripciones y su fecha_registro.\par
+\par
+\b Caso 2 - Inscripcion validada\b0\par
+1. Registrar un segundo piloto con evento, categoria, motocicleta y dorsal diferentes.\par
+2. Seleccionar el estado VALIDADA.\par
+3. Guardar la inscripcion.\par
+4. Filtrar por evento y categoria.\par
+5. Ordenar por dorsal o piloto.\par
+6. Confirmar que el estado VALIDADA se muestre en el listado.\par
+7. Verificar el registro y la auditoria en la base de datos.\par
+\par
+\b Caso 3 - Inscripcion pagada o rechazada\b0\par
+1. Registrar un tercer piloto con un dorsal disponible.\par
+2. Seleccionar PAGADA o RECHAZADA.\par
+3. Guardar el registro.\par
+4. Filtrar por estado.\par
+5. Abrir la seccion Reportes.\par
+6. Exportar el resultado a PDF o CSV.\par
+7. Revisar el registro correspondiente en la base de datos.\par
+\par
+\b 3. Modulo de competencia\b0\par
+El modulo se divide en clasificacion o inscripcion, Heat 1, Heat 2 y resultado final. Si existe clasificacion para el evento y categoria, esta ordena la parrilla inicial. Si no existe, se utiliza la fecha y hora de inscripcion. La clasificacion no suma puntos.\par
+\par
+En Heat 1 se agregan manualmente los pilotos y se ordenan segun la llegada. En Heat 2 se agregan manualmente segun la llegada del Heat 2. Las tarjetas se pueden agregar con buscador, arrastrar, subir, bajar, eliminar y limpiar con confirmacion.\par
+\par
+Los puntos por posicion son: 25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2 y 1 para las posiciones 1 a 15. Desde la posicion 16 se asignan 0 puntos.\par
+\par
+El resultado final suma H1 y H2. En caso de empate gana el piloto que termino delante en el Heat 2.\par
+\par
+Tablas relacionadas: grupos_categoria_evento, categorias_en_grupo, heats, resultados_tiempos, clasificaciones_generales, esquemas_puntos, inscripciones, notificaciones y auditoria_logs.\par
+\par
+\b Revision contra la base de datos\b0\par
+Despues de crear una inscripcion revisar inscripciones, evento_id, categoria_id, piloto_id, motocicleta_id, dorsal_asignado, estado y fecha_registro.\par
+Despues de guardar cada heat revisar heats, resultados_tiempos, heat_id, inscripcion_id, posicion y puntos_ganados. Tambien verificar heat1_completado y heat2_completado en grupos_categoria_evento.\par
+Despues del resultado final comprobar que TOTAL sea H1 mas H2 y que el desempate respete la posicion del Heat 2.\par
+\par
+\b Cierre\b0\par
+El sistema permite autenticar usuarios, administrar inscripciones, aplicar filtros, paginar, ordenar, generar reportes, construir parrillas, registrar dos heats manualmente, calcular el resultado final y verificar la persistencia de los datos directamente en la base de datos.\par
+}

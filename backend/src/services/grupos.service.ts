@@ -75,7 +75,7 @@ export async function listarGrupos(eventoId: string) {
   const mapConteos: Record<string, number> = {};
   conteos.forEach((r) => (mapConteos[r.categoria_id] = r._count.categoria_id));
 
-  return grupos.map((g) => ({
+  return (grupos as any[]).map((g: any) => ({
     id: g.id,
     nombre: g.nombre,
     descripcion: g.descripcion,
@@ -84,7 +84,7 @@ export async function listarGrupos(eventoId: string) {
     heat1_completado: g.heat1_completado,
     heat2_completado: g.heat2_completado,
     orden: g.orden,
-    categorias: g.categorias_en_grupo.map((cg) => ({
+    categorias: g.categorias_en_grupo.map((cg: any) => ({
       id: cg.categoria.id,
       nombre: cg.categoria.nombre,
       cilindrada_min: cg.categoria.cilindrada_min,

@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function getToken() {
   if (typeof document === "undefined") return null;
@@ -186,7 +186,7 @@ export async function updateInscripcion(inscripcionId, payload) {
     if (process.env.NODE_ENV !== 'production') {
       const tryUrls = [
         `${API_URL}/api/admin/inscripciones/${inscripcionId}/public`,
-        `http://localhost:3001/api/admin/inscripciones/${inscripcionId}/public`,
+        `${API_URL}/api/admin/inscripciones/${inscripcionId}/public`,
       ];
 
       let lastError = null;
@@ -225,7 +225,7 @@ export async function deleteInscripcion(inscripcionId) {
     if (process.env.NODE_ENV !== 'production') {
       const tryUrls = [
         `${API_URL}/api/admin/inscripciones/${inscripcionId}/public`,
-        `http://localhost:3001/api/admin/inscripciones/${inscripcionId}/public`,
+        `${API_URL}/api/admin/inscripciones/${inscripcionId}/public`,
       ];
 
       let lastError = null;
@@ -278,4 +278,25 @@ export async function getPilotoPublicDetail(pilotoId) {
   } catch {
     return {};
   }
+}
+export async function listCampeonatos() {
+  const res = await fetch(`${API_URL}/api/mantenimiento/campeonatos`, {
+    headers: {
+      Authorization: `Bearer ${typeof document !== "undefined" ? decodeURIComponent((document.cookie.match(/(^| )mwt_token=([^;]+)/) || [])[2] || "") : ""}`,
+    },
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "No se pudieron cargar los campeonatos.");
+  const data = await res.json();
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+export async function listCircuitos() {
+  const res = await fetch(`${API_URL}/api/mantenimiento/circuitos`, {
+    headers: {
+      Authorization: `Bearer ${typeof document !== "undefined" ? decodeURIComponent((document.cookie.match(/(^| )mwt_token=([^;]+)/) || [])[2] || "") : ""}`,
+    },
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "No se pudieron cargar los circuitos.");
+  const data = await res.json();
+  return Array.isArray(data.items) ? data.items : [];
 }

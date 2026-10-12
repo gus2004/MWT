@@ -299,6 +299,7 @@ export async function saveClasificacionTiempo(grupoId: string, inscripcionId: st
   if (!heat) {
     heat = await prisma.heat.create({ data: { categoria_id: ins.categoria_id, nombre: heatName, vueltas: 0, esta_activo: true } });
   }
+  const heatId = heat.id;
 
   const v1ms = vuelta1 ? parseTimeToMs(vuelta1) : null;
   const v2ms = vuelta2 ? parseTimeToMs(vuelta2) : null;
@@ -309,11 +310,11 @@ export async function saveClasificacionTiempo(grupoId: string, inscripcionId: st
   const diferencia = v1ms != null && v2ms != null ? formatMsToTime(Math.abs(v2ms - v1ms)) : null;
 
   await (prisma.$transaction as any)(async (tx: any) => {
-    await tx.resultadoTiempo.deleteMany({ where: { inscripcion_id: inscripcionId, heat_id: heat!.id, estatus_carrera: 'CLASIFICACION' } });
+    await tx.resultadoTiempo.deleteMany({ where: { inscripcion_id: inscripcionId, heat_id: heatId, estatus_carrera: 'CLASIFICACION' } });
 
     await tx.resultadoTiempo.create({
       data: {
-        heat_id:         heat.id,
+        heat_id:         heatId,
         inscripcion_id:  inscripcionId,
         posicion:        0,
         mejor_vuelta:    mejor,

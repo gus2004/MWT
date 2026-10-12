@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Trophy, Shield, ChevronLeft } from "lucide-react";
 import { Kpi, Card, Empty, Table, Tabs, Badge } from "@/components/kit";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export default function PublicoClient() {
   const [data, setData] = useState(null);
@@ -41,25 +41,25 @@ export default function PublicoClient() {
   }, [clasificaciones]);
 
   return (
-    <div className="min-h-screen bg-white text-slate-900" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
+    <div className="min-h-screen bg-white text-slate-900 overflow-x-clip" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
       {/* Header público */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
-        <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shrink-0">
               <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M12 3L22 21H2Z" opacity=".4" /><path d="M12 8L19 20H5Z" /></svg>
             </div>
-            <div>
-              <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-900 leading-none">MWT · Estadísticas</div>
-              <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-600 mt-0.5">Consulta pública del campeonato</div>
+            <div className="min-w-0">
+              <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-900 leading-none truncate">MWT · Estadísticas</div>
+              <div className="hidden sm:block text-[8px] font-black uppercase tracking-[0.22em] text-blue-600 mt-0.5">Consulta pública del campeonato</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/" className="px-4 py-2 rounded-[10px] border border-slate-200 text-slate-600 text-xs font-black uppercase tracking-[0.08em] hover:border-blue-300 hover:text-blue-600 transition-colors">
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/" className="px-3 sm:px-4 py-2 rounded-[10px] border border-slate-200 text-slate-600 text-xs font-black uppercase tracking-[0.08em] hover:border-blue-300 hover:text-blue-600 transition-colors whitespace-nowrap">
               <span className="inline-flex items-center gap-1"><ChevronLeft size={12} /> Volver</span>
             </Link>
-            <Link href="/login" className="px-4 py-2 rounded-[10px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-black uppercase tracking-[0.08em] hover:from-blue-500 hover:to-indigo-500 transition-colors">
-              Ingresar como personal
+            <Link href="/login" className="px-3 sm:px-4 py-2 rounded-[10px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-black uppercase tracking-[0.08em] hover:from-blue-500 hover:to-indigo-500 transition-colors whitespace-nowrap">
+              Ingresar<span className="hidden sm:inline"> como personal</span>
             </Link>
           </div>
         </div>

@@ -17,6 +17,10 @@ const REQUIRE_ADMIN_PREFIX = [
   "/dashboard/reportes",
 ];
 
+const REQUIRE_ROLES_PREFIX = [
+  { prefix: "/dashboard/inscripciones", roles: ["ADMIN", "STAFF", "STAFF_TECNICO"] },
+];
+
 export function middleware(request) {
   const token = request.cookies.get("mwt_token")?.value;
   const { pathname } = request.nextUrl;
@@ -41,6 +45,20 @@ export function middleware(request) {
       : [];
     const isAdmin = roles.includes("ADMIN");
     if (!isAdmin) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
+  const roleRule = REQUIRE_ROLES_PREFIX.find((rule) =>
+    pathname.startsWith(rule.prefix)
+  );
+  if (token && roleRule) {
+    const payload = decodeJwt(token);
+    const roles = Array.isArray(payload?.roles)
+      ? payload.roles.map((r) => String(r).toUpperCase())
+      : [];
+    const allowed = new Set(roleRule.roles.map((r) => String(r).toUpperCase()));
+    if (!roles.some((r) => allowed.has(r))) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }

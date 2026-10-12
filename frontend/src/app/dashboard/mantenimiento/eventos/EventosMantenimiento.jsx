@@ -5,6 +5,7 @@ import Link from "next/link";
 import styles from "../mantenimiento.module.css";
 import { MAINTENANCE_ENTITIES } from "../maintenance.config";
 import { deleteEvento, listEventos, publishEvento, saveDraftEvento } from "@/lib/adminApi";
+import { useConfirm } from "@/components/ConfirmProvider";
 
 const entityConfig = MAINTENANCE_ENTITIES.eventos;
 const fields = entityConfig.fields ?? [];
@@ -32,6 +33,7 @@ const toRow = (item) => ({
 });
 
 export default function EventosMantenimiento() {
+  const { confirm } = useConfirm();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +182,7 @@ export default function EventosMantenimiento() {
   };
 
   const handleDelete = async (item) => {
-    const confirmed = window.confirm(`¿Eliminar el evento \"${item.nombre}\"? Esta acción borrará también sus inscripciones y datos asociados.`);
+    const confirmed = await confirm({ title: "Eliminar evento", message: `¿Eliminar el evento "${item.nombre}"? Esta acción borrará también sus inscripciones y datos asociados.`, confirmText: "Eliminar" });
     if (!confirmed) return;
 
     try {
@@ -232,7 +234,7 @@ export default function EventosMantenimiento() {
         {error ? <div className={styles.emptyState}>{error}</div> : null}
 
         <div className={styles.fakeTable}>
-          <div className={styles.tableHeader} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(0, 1fr))` }}>
+          <div className={styles.tableHeader} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(140px, 1fr))` }}>
             {columns.map((column) => (
               <div key={column.key} className={styles.th}>
                 {column.label}
@@ -246,7 +248,7 @@ export default function EventosMantenimiento() {
               <div className={styles.emptyState}>{loading ? "Cargando eventos..." : "No hay eventos publicados en la base de datos."}</div>
             ) : (
               activeItems.map((item) => (
-                <div key={item.id} className={styles.tr} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(0, 1fr))` }}>
+                <div key={item.id} className={styles.tr} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(140px, 1fr))` }}>
                   {columns.map((column) => {
                     const field = fields.find((entry) => entry.key === column.key) ?? { type: "text" };
                     const rawValue = column.key === "campeonato_id" ? item.campeonato_nombre || item.campeonato_id : item[column.key];

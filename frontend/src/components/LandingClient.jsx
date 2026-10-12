@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   FileText, Users, Flag, Shield, BarChart2, Bell, Calendar, MapPin,
-  Zap, Trophy, ChevronLeft, ChevronRight, X, Check,
+  Zap, Trophy, X, Menu,
 } from "lucide-react";
 import EventCarousel from "../app/EventCarousel";
 
@@ -52,6 +52,7 @@ function EventStatusBadge({ estado }) {
 
 export default function LandingClient({ eventos }) {
   const [askOpen, setAskOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("");
 
   const nextEvents = useMemo(() => (Array.isArray(eventos) ? eventos.slice(0, 3) : []), [eventos]);
@@ -76,10 +77,10 @@ export default function LandingClient({ eventos }) {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
+    <div className="min-h-screen bg-white text-slate-900 overflow-x-clip" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
       {/* ── Sticky Header ── */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
-        <div className="max-w-[1280px] mx-auto flex items-center justify-between px-8 h-16">
+        <div className="max-w-[1280px] mx-auto flex items-center justify-between px-4 sm:px-8 h-16 gap-2">
           <Link href="/" className="flex items-center gap-3 shrink-0">
             <MwtLogo />
             <div>
@@ -103,23 +104,56 @@ export default function LandingClient({ eventos }) {
             </Link>
           </nav>
 
-          <button
-            onClick={() => setAskOpen(true)}
-            className="px-5 py-2 rounded-[10px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-black uppercase tracking-[0.07em] hover:from-blue-700 hover:to-indigo-700 shadow-md transition-all"
-          >
-            Ingresar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAskOpen(true)}
+              className="px-4 py-2 sm:px-5 rounded-[10px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs sm:text-sm font-black uppercase tracking-[0.07em] hover:from-blue-700 hover:to-indigo-700 shadow-md transition-all"
+            >
+              Ingresar
+            </button>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="md:hidden w-10 h-10 rounded-[10px] border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-colors"
+              aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
+              aria-expanded={menuOpen}
+            >
+              {menuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </div>
+
+        {menuOpen ? (
+          <nav className="md:hidden border-t border-slate-100 bg-white shadow-lg">
+            <div className="px-4 py-3 space-y-1">
+              {[{ id: "quienes-somos", l: "Quiénes somos" }, { id: "calendario", l: "Calendario" }, { id: "sistema", l: "Áreas del sistema" }].map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => { setMenuOpen(false); scrollTo(s.id, s.l); }}
+                  className={`w-full text-left px-3 py-2.5 rounded-[10px] text-sm font-bold uppercase tracking-[0.07em] transition-colors ${activeSection === s.l ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"}`}
+                >
+                  {s.l}
+                </button>
+              ))}
+              <Link
+                href="/publico"
+                onClick={() => setMenuOpen(false)}
+                className="block w-full px-3 py-2.5 rounded-[10px] text-sm font-bold uppercase tracking-[0.07em] text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                Estadísticas
+              </Link>
+            </div>
+          </nav>
+        ) : null}
       </header>
 
       {/* ── Hero ── */}
-      <section className="pt-16 min-h-screen max-w-[1280px] mx-auto px-8 flex items-center">
-        <div className="grid lg:grid-cols-2 gap-16 items-center w-full py-20">
-          <div>
+      <section className="pt-16 min-h-screen max-w-[1280px] mx-auto px-4 sm:px-8 flex items-center">
+        <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-2 gap-10 lg:gap-16 items-center w-full py-20 min-w-0">
+          <div className="min-w-0">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-[0.15em] mb-6">
               <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Temporada 2026 en curso
             </div>
-            <h1 className="text-5xl font-black uppercase tracking-[-0.02em] leading-[0.92] text-slate-900 mb-6">
+            <h1 className="text-[clamp(1.6rem,8.4vw,2.3rem)] sm:text-5xl font-black uppercase tracking-[-0.02em] leading-[0.95] text-slate-900 mb-6">
               Calendario,<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">inscripciones</span><br />
               y resultados<br />
@@ -138,7 +172,7 @@ export default function LandingClient({ eventos }) {
                 Iniciar sesión
               </Link>
             </div>
-            <div className="flex items-center gap-8 pt-8 border-t border-slate-100">
+            <div className="flex items-center gap-6 sm:gap-8 pt-8 border-t border-slate-100 flex-wrap">
               {[{ v: "2026", l: "Temporada" }, { v: String(eventos.length), l: "Eventos públicos" }, { v: organizers.length || "ACMG", l: "Organizadores" }].map((m) => (
                 <div key={m.l}>
                   <div className="text-2xl font-black text-blue-600">{m.v}</div>
@@ -205,7 +239,7 @@ export default function LandingClient({ eventos }) {
 
       {/* ── Áreas del sistema ── */}
       <section id="sistema" className="py-20 bg-slate-50">
-        <div className="max-w-[1280px] mx-auto px-8">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
           <div className="text-center mb-12">
             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-2">Plataforma completa</div>
             <h2 className="text-3xl font-black uppercase tracking-[-0.01em] text-slate-900">Áreas del sistema</h2>
@@ -229,7 +263,7 @@ export default function LandingClient({ eventos }) {
 
       {/* ── Quiénes somos ── */}
       <section id="quienes-somos" className="py-20">
-        <div className="max-w-[1280px] mx-auto px-8 grid lg:grid-cols-2 gap-16 items-center">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
           <div>
             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-2">Quiénes somos</div>
             <h2 className="text-3xl font-black uppercase tracking-[-0.01em] text-slate-900 mb-5">Most Wanted Team</h2>
@@ -266,7 +300,7 @@ export default function LandingClient({ eventos }) {
 
       {/* ── Próximos eventos carousel ── */}
       <section id="calendario" className="py-20 bg-slate-50">
-        <div className="max-w-[1280px] mx-auto px-8">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
           <div className="text-center mb-10">
             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-2">Calendario</div>
             <h2 className="text-3xl font-black uppercase tracking-[-0.01em] text-slate-900">Próximos eventos</h2>
@@ -280,9 +314,9 @@ export default function LandingClient({ eventos }) {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-indigo-700 pointer-events-none" />
         <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/2 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full bg-black/10 translate-y-1/2 -translate-x-1/4 pointer-events-none" />
-        <div className="relative max-w-[640px] mx-auto px-8 text-center">
+        <div className="relative max-w-[640px] mx-auto px-4 sm:px-8 text-center">
           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200 mb-3">Plataforma oficial</div>
-          <h2 className="text-4xl font-black uppercase tracking-[-0.01em] text-white mb-5">Entrar al sistema</h2>
+          <h2 className="text-3xl sm:text-4xl font-black uppercase tracking-[-0.01em] text-white mb-5">Entrar al sistema</h2>
           <p className="text-sm text-blue-100 leading-relaxed mb-10">Gestioná tu inscripción, revisá el calendario de competencias y seguí la clasificación del campeonato en tiempo real.</p>
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <Link href="/login"
@@ -299,9 +333,9 @@ export default function LandingClient({ eventos }) {
 
       {/* Footer */}
       <footer className="py-6 border-t border-slate-100">
-        <div className="max-w-[1280px] mx-auto px-8 flex items-center justify-between flex-wrap gap-3">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 flex items-center justify-between flex-wrap gap-3">
           <div className="text-[10px] text-slate-400 uppercase tracking-[0.12em]">© 2026 MWT Motorsport · ACMG · FMG · Guatemala</div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6 flex-wrap">
             {["Privacidad", "Términos", "Contacto"].map((l) => (
               <span key={l} className="text-[10px] text-slate-400 hover:text-blue-600 cursor-pointer transition-colors uppercase tracking-[0.1em] font-bold">{l}</span>
             ))}

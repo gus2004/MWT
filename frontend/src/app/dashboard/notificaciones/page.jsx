@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bell, BellRing, CheckCheck, Pencil, Plus, Save } from "lucide-react";
-import { Badge, Btn, Empty, Field, Modal, Tabs, inputCls, selectCls } from "@/components/kit";
+import { Badge, Btn, Empty, Field, Modal, SearchSelect, Tabs, inputCls, selectCls } from "@/components/kit";
 import { soporteApi, getCurrentUser } from "@/lib/soporteApi";
 import { listEventos } from "@/lib/adminApi";
 
@@ -35,6 +35,33 @@ export default function NotificacionesPage() {
   const [saving, setSaving] = useState(false);
   const [editando, setEditando] = useState(null);
 
+  const eventoGroups = useMemo(() => {
+    const evs = Array.isArray(eventos) ? eventos : Array.isArray(eventos?.items) ? eventos.items : [];
+    const map = {};
+    evs.forEach((ev) => {
+      const key = ev.campeonato?.nombre || "Sin campeonato";
+      (map[key] = map[key] || []).push(ev);
+    });
+    return Object.keys(map)
+      .sort((a, b) => a.localeCompare(b))
+      .map((label) => ({
+        label,
+        options: map[label]
+          .slice()
+          .sort((a, b) => {
+            const ta = a.fecha_inicio ? new Date(a.fecha_inicio).getTime() : Infinity;
+            const tb = b.fecha_inicio ? new Date(b.fecha_inicio).getTime() : Infinity;
+            return ta - tb;
+          })
+          .map((ev) => ({
+            value: String(ev.id),
+            label: ev.fecha_inicio
+              ? `${ev.nombre} · ${new Date(ev.fecha_inicio).toLocaleDateString("es-GT", { day: "2-digit", month: "short" })}`
+              : ev.nombre,
+          })),
+      }));
+  }, [eventos]);
+
   const load = async () => {
     setLoading(true);
     setError("");
@@ -43,7 +70,7 @@ export default function NotificacionesPage() {
         soporteApi.listNotificaciones().catch(() => []),
         soporteApi.listPlantillas().catch(() => []),
         listEventos().catch(() => []),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/public/inscripciones?options=1`).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/public/inscripciones?options=1`).then((r) => r.ok ? r.json() : []).catch(() => []),
       ]);
       setNotis(n);
       setPlantillas(p);
@@ -305,10 +332,7 @@ export default function NotificacionesPage() {
             ) : null}
           </Field>
           <Field label="Evento relacionado (opcional)">
-            <select className={selectCls} value={draft.evento_id || ""} onChange={(e) => setDraft({ ...draft, evento_id: e.target.value })}>
-              <option value="">Sin evento</option>
-              {Array.isArray(eventos) ? eventos.map((ev) => <option key={ev.id} value={ev.id}>{ev.nombre}</option>) : (Array.isArray(eventos?.items) ? eventos.items.map((ev) => <option key={ev.id} value={ev.id}>{ev.nombre}</option>) : null)}
-            </select>
+            <SearchSelect clearable groups={eventoGroups} value={draft.evento_id || ""} onChange={(v) => setDraft({ ...draft, evento_id: v })} placeholder="Sin evento" searchPlaceholder="Buscar evento..." />
           </Field>
           <Field label="Tipo">
             <select className={selectCls} value={draft.tipo || "general"} onChange={(e) => setDraft({ ...draft, tipo: e.target.value })}>

@@ -485,6 +485,7 @@ model ResultadoTiempo {
   tiempo_total    String?
   vuelta_1  String?
   vuelta_2  String?
+  vueltas_completadas Int?
   puntos_ganados  Int         @default(0)
   estatus_carrera String      @default("FIN")
   heat            Heat        @relation(fields: [heat_id], references: [id])

@@ -10,9 +10,9 @@ router.put('/:id', authRequired, requireRoles('ADMIN', 'STAFF'), updateInscripci
 router.delete('/:id', authRequired, requireRoles('ADMIN', 'STAFF'), deleteInscripcionController);
 
 if (process.env.NODE_ENV !== 'production') {
-  router.post('/create/public', authRequired, createInscripcionController);
-  router.put('/:id/public', authRequired, updateInscripcionController);
-  router.delete('/:id/public', authRequired, deleteInscripcionController);
+  router.post('/create/public', createInscripcionController);
+  router.put('/:id/public', updateInscripcionController);
+  router.delete('/:id/public', deleteInscripcionController);
 }
 router.get('/dorsales-disponibles', authRequired, requireRoles('ADMIN', 'STAFF'), dorsalesDisponibles);
 

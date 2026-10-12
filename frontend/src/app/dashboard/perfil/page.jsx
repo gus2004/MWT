@@ -1,11 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { Badge, Btn, Card, Field, inputCls, selectCls } from "@/components/kit";
 import { NameField, CuiField, TelField, NumberField, DateField, YearField } from "@/components/fields";
 import { updateProfile, getToken } from "@/lib/auth";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const SANGRE = ["", "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
+
+function PwdInput({ className, ...props }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input type={show ? "text" : "password"} className={`${className} pr-9`} {...props} />
+      <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors" tabIndex={-1}>
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
+}
 
 export default function PerfilPage() {
   const [me, setMe] = useState(null);
@@ -203,10 +216,10 @@ export default function PerfilPage() {
 
         <Card title="Seguridad" sub="Cambiar mi contraseña.">
           <form onSubmit={cambiarPassword} className="space-y-3">
-            <Field label="Contraseña actual"><input name="actual" type="password" className={inputCls} required autoComplete="current-password" /></Field>
+            <Field label="Contraseña actual"><PwdInput name="actual" className={inputCls} required autoComplete="current-password" /></Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Nueva contraseña"><input name="nueva" type="password" className={inputCls} required minLength={6} autoComplete="new-password" /></Field>
-              <Field label="Confirmar nueva"><input name="confirmar" type="password" className={inputCls} required minLength={6} autoComplete="new-password" /></Field>
+              <Field label="Nueva contraseña"><PwdInput name="nueva" className={inputCls} required minLength={6} autoComplete="new-password" /></Field>
+              <Field label="Confirmar nueva"><PwdInput name="confirmar" className={inputCls} required minLength={6} autoComplete="new-password" /></Field>
             </div>
             <div className="flex justify-end">
               <Btn variant="gradient" type="submit" disabled={saving}>{saving ? "Guardando..." : "Cambiar contraseña"}</Btn>

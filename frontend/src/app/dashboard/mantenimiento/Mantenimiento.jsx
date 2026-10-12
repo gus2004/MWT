@@ -73,7 +73,7 @@ export default function Mantenimiento() {
   useEffect(() => {
     let mounted = true;
     // loading already true by default; avoid synchronous setState inside effect
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/public/maintenance/modules`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/public/maintenance/modules`)
       .then(async (r) => {
         const contentType = r.headers.get("content-type") || "";
         const body = await r.text();

@@ -23,7 +23,7 @@ export const MAINTENANCE_ENTITIES = {
       field("password", "Contraseña", "password", { required: true, placeholder: "Contraseña" }),
       field("esta_activo", "Activo", "checkbox", { defaultValue: true }),
       field("roles", "Rol del sistema", "select", {
-        options: ["PILOTO", "STAFF", "COMISARIO", "JUEZ_MESA", "ADMIN"],
+        dynamicOptions: "/api/mantenimiento/crud/roles",
         placeholder: "Seleccione un rol",
       }),
     ],

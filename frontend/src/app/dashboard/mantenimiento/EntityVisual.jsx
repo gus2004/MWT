@@ -6,6 +6,7 @@ import styles from "./mantenimiento.module.css";
 import { formatCui, maskPhone, onlyLetters, onlyDigits, DEFAULT_COUNTRY } from "@/lib/formats";
 import { getCurrentUser } from "@/lib/soporteApi";
 import { getUserRoles } from "@/lib/modules";
+import { useConfirm } from "@/components/ConfirmProvider";
 
 const isAdminUser = () => getUserRoles(getCurrentUser()).includes("ADMIN");
 
@@ -27,7 +28,7 @@ const applyMask = (field, value) => {
   }
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function getToken() {
   if (typeof document === "undefined") return null;
@@ -85,6 +86,7 @@ const resolveValue = (item, key) => {
 };
 
 export default function EntityVisual({ config, name, description, sampleColumns = [] }) {
+  const { confirm } = useConfirm();
   const entityConfig = config ?? {
     key: name?.toLowerCase?.().replace(/\s+/g, "-") ?? "mantenimiento",
     title: name ?? "Mantenimiento",
@@ -118,6 +120,32 @@ export default function EntityVisual({ config, name, description, sampleColumns 
   const [sortDir, setSortDir] = useState("asc");
   const [estado, setEstado] = useState("");
   const [viewItem, setViewItem] = useState(null);
+  const [dynamicOptions, setDynamicOptions] = useState({});
+
+  useEffect(() => {
+    const dynamicFields = fields.filter((f) => f.type === "select" && f.dynamicOptions);
+    if (!dynamicFields.length) return;
+    let mounted = true;
+    Promise.all(
+      dynamicFields.map(async (f) => {
+        try {
+          const data = await api(f.dynamicOptions);
+          const items = Array.isArray(data.items) ? data.items : [];
+          return { key: f.key, items };
+        } catch (err) {
+          return { key: f.key, items: [] };
+        }
+      })
+    ).then((results) => {
+      if (!mounted) return;
+      const map = {};
+      results.forEach((r) => (map[r.key] = r.items));
+      setDynamicOptions(map);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [fields]);
 
   const estadoFilter = entityConfig.estadoFilter;
   const hasEstadoFilter = Boolean(estadoFilter && estadoFilter.options?.length);
@@ -261,7 +289,7 @@ export default function EntityVisual({ config, name, description, sampleColumns 
   };
 
   const removeItem = async (id) => {
-    if (!confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
+    if (!(await confirm({ title: "Eliminar registro", message: "¿Eliminar este registro? Esta acción no se puede deshacer.", confirmText: "Eliminar" }))) return;
     setBusy(true);
     setError("");
     try {
@@ -331,7 +359,7 @@ export default function EntityVisual({ config, name, description, sampleColumns 
         </div>
 
           <div className={styles.fakeTable}>
-          <div className={styles.tableHeader} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(0, 1fr))` }}>
+          <div className={styles.tableHeader} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(140px, 1fr))` }}>
             {columns.map((column) => (
               <button
                 key={column.key}
@@ -350,10 +378,10 @@ export default function EntityVisual({ config, name, description, sampleColumns 
             {loading ? (
               <div className={styles.emptyState}>Cargando registros desde el sistema...</div>
             ) : visibleItems.length === 0 ? (
-              <div className={styles.emptyState}>No hay registros. Use "Nuevo registro" para capturar el primero.</div>
+              <div className={styles.emptyState}>No hay registros. Use &quot;Nuevo registro&quot; para capturar el primero.</div>
             ) : (
               pageItems.map((item) => (
-                <div key={item.id} className={styles.tr} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(0, 1fr))` }}>
+                <div key={item.id} className={styles.tr} style={{ gridTemplateColumns: `repeat(${Math.max(columns.length, 1) + 1}, minmax(140px, 1fr))` }}>
                   {columns.map((column) => {
                     const field = fields.find((entry) => entry.key === column.key) ?? { type: "text" };
                     const rawValue = resolveValue(item, column.key);
@@ -433,11 +461,15 @@ export default function EntityVisual({ config, name, description, sampleColumns 
                       required={field.required}
                     >
                       <option value="">Seleccione</option>
-                      {field.options?.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
+                      {(dynamicOptions[field.key] || field.options || []).map((option) => {
+                        const label = typeof option === "object" ? option.nombre || option.label : option;
+                        const value = typeof option === "object" ? option.nombre || option.value : option;
+                        return (
+                          <option key={String(value)} value={value}>
+                            {label}
+                          </option>
+                        );
+                      })}
                     </select>
                   ) : field.type === "checkbox" ? (
                     <input
@@ -445,6 +477,14 @@ export default function EntityVisual({ config, name, description, sampleColumns 
                       type="checkbox"
                       checked={Boolean(draft[field.key])}
                       onChange={(event) => handleChange(field, event.target.checked)}
+                    />
+) : field.type === "password" ? (
+                    <PwdFieldInput
+                      className={styles.input}
+                      value={draft[field.key]}
+                      onChange={(event) => handleChange(field, event.target.value)}
+                      placeholder={field.placeholder}
+                      required={field.required}
                     />
                   ) : (
                     <input
@@ -510,6 +550,28 @@ export default function EntityVisual({ config, name, description, sampleColumns 
         </div>
       ) : null}
     </main>
+  );
+}
+
+function PwdFieldInput({ className, ...props }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+      <input
+        className={className}
+        type={show ? "text" : "password"}
+        {...props}
+        style={{ ...(props.style || {}), paddingRight: 36 }}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow((v) => !v)}
+        style={{ position: "absolute", right: 10, border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#64748b", padding: 0 }}
+      >
+        {show ? "🙈" : "👁"}
+      </button>
+    </div>
   );
 }
 

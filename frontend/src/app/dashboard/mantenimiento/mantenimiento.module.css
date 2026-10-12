@@ -49,7 +49,7 @@
 .searchControls{display:flex;align-items:center;gap:10px;flex:1;min-width:280px;justify-content:flex-end;flex-wrap:wrap}
 .searchInput{flex:1;min-width:240px;border:1px solid rgba(148,163,184,.22);border-radius:12px;padding:12px 14px;background:var(--surface-strong);color:var(--text-primary);box-shadow:0 8px 16px rgba(2,6,23,.06)}
 .counter{padding:11px 14px;border-radius:12px;background:color-mix(in srgb,var(--accent-blue) 14%,transparent);color:var(--text-primary);font-weight:800;white-space:nowrap}
-.fakeTable{background:var(--surface-strong);border-radius:14px;padding:12px;border:1px solid rgba(148,163,184,.18);overflow:hidden}
+.fakeTable{background:var(--surface-strong);border-radius:14px;padding:12px;border:1px solid rgba(148,163,184,.18);overflow-x:auto;scrollbar-width:thin}
 .tableHeader{display:grid;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(148,163,184,.18);background:color-mix(in srgb,var(--surface-strong) 86%,var(--header-bg))}
 .th{font-weight:700;color:var(--text-primary)}
 .thSortable{background:transparent;border:none;cursor:pointer;text-align:left;padding:0;font:inherit;color:var(--text-primary)}

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useRef } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 
 function parseTimeToMs(value) {
   if (!value || value === "-" || value === "NSP" || value === "TNC" || value === "DQ") return null;
@@ -67,9 +68,13 @@ export default function TablaClasificacionOficial({
   hora = "",
   logoIzquierdaUrl = null,
   logoDerechaUrl = null,
+  mostrarPuntos = false,
+  tipoTabla = "clasificacion",
   maxRows = 20,
 }) {
+  const { notify } = useConfirm();
   const tablaRef = useRef(null);
+  const esTablaResultados = tipoTabla === "resultado" || tipoTabla === "final";
 
   const normalizadas = useMemo(() => {
     return filas
@@ -99,17 +104,19 @@ export default function TablaClasificacionOficial({
           vuelta2,
           mejorMs,
           mejorStr: formatMs(mejorMs),
+          puntos: fila.puntos ?? 0,
           esMejorV1: ms1 != null && ms1 === mejorMs,
           esMejorV2: ms2 != null && ms2 === mejorMs && ms1 !== mejorMs,
         };
       })
       .sort((a, b) => {
+        if (tipoTabla === "resultado" || tipoTabla === "final") return Number(a.pos) - Number(b.pos);
         if (a.mejorMs == null && b.mejorMs == null) return 0;
         if (a.mejorMs == null) return 1;
         if (b.mejorMs == null) return -1;
         return a.mejorMs - b.mejorMs;
       });
-  }, [filas]);
+  }, [filas, tipoTabla]);
 
   const liderMs = normalizadas[0]?.mejorMs ?? null;
   const filasRender = useMemo(() => {
@@ -131,16 +138,17 @@ export default function TablaClasificacionOficial({
   }, [normalizadas, maxRows]);
 
   const exportarCSV = () => {
-    const cabeceras = ["Pos", "#", "Piloto", "Clase", "Vuelta 1", "Vuelta 2", "Mejor Tiempo", "Dif. Líder"];
+    const cabeceras = tipoTabla === "final"
+      ? ["POS", "#", "PILOTO", "CAT.", "H1", "H2", "TOTAL"]
+      : tipoTabla === "resultado"
+      ? ["POSICIÓN", "#", "PILOTO", "CAT.", "PUNTOS", "SANCIÓN"]
+      : ["Pos", "#", "Piloto", "Clase", "Vuelta 1", "Vuelta 2", "Mejor Tiempo", "Dif. Líder", ...(mostrarPuntos ? ["Puntos"] : [])];
     const filasCsv = normalizadas.map((fila) => [
-      fila.pos,
-      fila.dorsal,
-      fila.nombre,
-      fila.clase,
-      displayValue(fila.vuelta1),
-      displayValue(fila.vuelta2),
-      fila.mejorStr,
-      diffStr(fila.mejorMs, liderMs),
+      ...(tipoTabla === "final"
+        ? [fila.pos, fila.dorsal, fila.nombre, fila.clase, fila.puntosHeat1, fila.puntosHeat2, fila.puntosTotal]
+        : tipoTabla === "resultado"
+        ? [fila.pos, fila.dorsal, fila.nombre, fila.clase, fila.puntos, displayValue(fila.sancion)]
+        : [fila.pos, fila.dorsal, fila.nombre, fila.clase, displayValue(fila.vuelta1), displayValue(fila.vuelta2), fila.mejorStr, diffStr(fila.mejorMs, liderMs), ...(mostrarPuntos ? [fila.puntos] : [])]),
     ]);
 
     const meta = [
@@ -168,27 +176,26 @@ export default function TablaClasificacionOficial({
     try {
       XLSX = await import("xlsx");
     } catch {
-      alert("La librería xlsx no está disponible. Usa la exportación CSV.");
+      await notify({ title: "Exportación no disponible", message: "La librería xlsx no está disponible. Usa la exportación CSV." });
       return;
     }
 
     const workbook = XLSX.utils.book_new();
     const aoa = [
       [campeonato, "", "", circuito],
-      ["Clasificación", "", "Válida:", valida, "Fecha:", fecha],
+      [tipoTabla === "final" ? "RESULTADO FINAL" : tipoTabla === "resultado" ? "Resultados" : "Clasificación", "", "Válida:", valida, "Fecha:", fecha],
       [`Categoría: ${categoria}`, "", "", "", "Hora:", hora],
       [],
-      ["Pos", "#", "Piloto", "Clase", "Vuelta 1", "Vuelta 2", "Mejor Tiempo", "Dif. Líder"],
-      ...normalizadas.map((fila) => [
-        fila.pos,
-        fila.dorsal,
-        fila.nombre,
-        fila.clase,
-        displayValue(fila.vuelta1),
-        displayValue(fila.vuelta2),
-        fila.mejorStr,
-        diffStr(fila.mejorMs, liderMs),
-      ]),
+      tipoTabla === "final"
+        ? ["POS", "#", "PILOTO", "CAT.", "H1", "H2", "TOTAL"]
+        : tipoTabla === "resultado"
+        ? ["POSICIÓN", "#", "PILOTO", "CAT.", "PUNTOS", "SANCIÓN"]
+        : ["Pos", "#", "Piloto", "Clase", "Vuelta 1", "Vuelta 2", "Mejor Tiempo", "Dif. Líder", ...(mostrarPuntos ? ["Puntos"] : [])],
+      ...normalizadas.map((fila) => tipoTabla === "final"
+        ? [fila.pos, fila.dorsal, fila.nombre, fila.clase, fila.puntosHeat1, fila.puntosHeat2, fila.puntosTotal]
+        : tipoTabla === "resultado"
+        ? [fila.pos, fila.dorsal, fila.nombre, fila.clase, fila.puntos, displayValue(fila.sancion)]
+        : [fila.pos, fila.dorsal, fila.nombre, fila.clase, displayValue(fila.vuelta1), displayValue(fila.vuelta2), fila.mejorStr, diffStr(fila.mejorMs, liderMs), ...(mostrarPuntos ? [fila.puntos] : [])]),
       [],
       ["♦ NSP = No Se Presentó", "♦ TI = Tiempo Inválido", "♦ DQ = Descalificado", "♦ TNC = Tiempo No Completo"],
     ];
@@ -219,7 +226,7 @@ export default function TablaClasificacionOficial({
         <title>Clasificación - ${categoria}</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #fff; }
+          body { font-family: Arial, sans-serif; font-size: ${esTablaResultados ? "13px" : "11px"}; color: #000; background: #fff; }
           .tabla-wrap { width: 100%; max-width: 900px; margin: 0 auto; }
           .enc-principal { background: #fff; color: #1f2937; padding: 8px 12px; display: grid; grid-template-columns: 72px 1fr 140px; align-items: center; border-bottom: 2px solid #2f4f4f; }
           .enc-principal .titulo { font-size: 18px; font-weight: 800; text-align: center; color: #254b4a; }
@@ -235,8 +242,8 @@ export default function TablaClasificacionOficial({
           tbody tr:nth-child(even) { background: #fff; }
           tbody tr:nth-child(odd) { background: #fff; }
           tbody tr.lider { background: #fff; }
-          tbody td { padding: 4px 6px; text-align: center; border: 1px dotted #7f8c8d; font-size: 12px; color: #254b4a; }
-          tbody td.piloto { text-align: center; font-weight: 600; text-transform: uppercase; }
+          tbody td { padding: 6px 7px; text-align: center; border: 1px dotted #7f8c8d; font-size: ${esTablaResultados ? "14px" : "12px"}; color: #254b4a; }
+          tbody td.piloto { text-align: center; font-weight: 600; text-transform: uppercase; font-size: ${esTablaResultados ? "14px" : "12px"}; }
           tbody td.vacia { color: transparent; }
           .mejor { font-weight: bold; color: #007a30; }
           .vuelta-ganadora { font-weight: bold; }
@@ -285,7 +292,7 @@ export default function TablaClasificacionOficial({
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: "#254b4a" }}>{campeonato}</div>
             <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: "#254b4a", opacity: 0.95 }}>
-              {`Clasificación${categoria ? ` - ${categoria}` : ""}`}
+              {`${tipoTabla === "final" ? "GRAN FINAL" : tipoTabla === "resultado" ? "Resultados" : "Clasificación"}${categoria ? ` - ${categoria}` : ""}`}
             </div>
           </div>
           <div className="image-slot" style={{ justifySelf: "end" }}>
@@ -304,24 +311,22 @@ export default function TablaClasificacionOficial({
           {hora ? <span>Hora: {hora}</span> : <span />}
         </div>
 
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 660 }}>
           <thead>
             <tr>
-              <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 42 }}>Pos</th>
+              <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 68 }}>{tipoTabla === "final" ? "POS" : tipoTabla === "resultado" ? "POSICIÓN" : "Pos"}</th>
               <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 46 }}>#</th>
               <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f" }}>Piloto</th>
               <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 110 }}>Clase</th>
-              <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 106 }}>Vuelta 1</th>
-              <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 106 }}>Vuelta 2</th>
-              <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 120 }}>Mejor Tiempo</th>
-              <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 120 }}>Diferencia</th>
+              {tipoTabla === "final" ? <><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 70 }}>H1</th><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 70 }}>H2</th><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 80 }}>TOTAL</th></> : tipoTabla === "resultado" ? <><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 70 }}>PUNTOS</th><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 90 }}>SANCIÓN</th></> : <><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 106 }}>Vuelta 1</th><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 106 }}>Vuelta 2</th><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 120 }}>Mejor Tiempo</th><th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 120 }}>Diferencia</th>{mostrarPuntos ? <th style={{ background: "#fff", color: "#254b4a", padding: "4px 6px", textAlign: "center", fontSize: 12, border: "1px solid #2f4f4f", width: 70 }}>Puntos</th> : null}</>}
             </tr>
           </thead>
           <tbody>
             {filasRender.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 20, textAlign: "center", color: "#94a3b8", border: "1px solid #e2e8f0" }}>
-                  No hay pilotos con tiempos registrados.
+                <td colSpan={tipoTabla === "final" ? 7 : tipoTabla === "resultado" ? 6 : mostrarPuntos ? 9 : 8} style={{ padding: 20, textAlign: "center", color: "#94a3b8", border: "1px solid #e2e8f0" }}>
+                  No hay resultados registrados.
                 </td>
               </tr>
             ) : (
@@ -333,16 +338,14 @@ export default function TablaClasificacionOficial({
                     <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{displayValue(fila.dorsal)}</td>
                     <td className={fila.vacia ? "vacia" : "piloto"} style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: 600, color: fila.vacia ? "transparent" : "#254b4a" }}>{fila.nombre || ""}</td>
                     <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#254b4a" }}>{displayValue(fila.clase)}</td>
-                    <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV1 ? "bold" : "normal", color: fila.esMejorV1 ? "#254b4a" : "#254b4a" }}>{displayValue(fila.vuelta1)}</td>
-                    <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV2 ? "bold" : "normal", color: fila.esMejorV2 ? "#254b4a" : "#254b4a" }}>{displayValue(fila.vuelta2)}</td>
-                    <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{displayValue(fila.mejorStr)}</td>
-                    <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#595959" }}>{fila.mejorMs == null ? "-" : diffStr(fila.mejorMs, liderMs)}</td>
+                    {tipoTabla === "final" ? <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosHeat1}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosHeat2}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosTotal}</td></> : tipoTabla === "resultado" ? <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntos}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#254b4a" }}>{displayValue(fila.sancion)}</td></> : <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV1 ? "bold" : "normal", color: "#254b4a" }}>{displayValue(fila.vuelta1)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV2 ? "bold" : "normal", color: "#254b4a" }}>{displayValue(fila.vuelta2)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{displayValue(fila.mejorStr)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#595959" }}>{fila.mejorMs == null ? "-" : diffStr(fila.mejorMs, liderMs)}</td>{mostrarPuntos ? <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntos}</td> : null}</>}
                   </tr>
                 );
               })
             )}
           </tbody>
         </table>
+        </div>
 
         <div style={{ background: "#fff", padding: "10px 18px", fontSize: 12, color: "#254b4a", borderTop: "2px solid #2f4f4f", borderRadius: "0 0 10px 10px", display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", fontWeight: 800 }}>
           <span>♦ NSP = No Se Presentó</span>

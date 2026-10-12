@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
+
 const BADGE_STYLES = {
   success: "bg-emerald-500/10 text-emerald-600",
   warning: "bg-amber-500/10 text-amber-600",
@@ -92,7 +94,175 @@ export const inputCls =
 
 export const selectCls = inputCls + " appearance-none";
 
-export function Btn({ children, onClick, variant = "primary", disabled, type = "button", className = "", sm }) {
+// Agrupa opciones bajo encabezados (ej. eventos por campeonato/serie).
+// `groups = [{ label, options }]` y `options` son mutuamente alternativos;
+// si se pasa `groups`, se renderizan con encabezados y el buscador filtra dentro.
+export function SearchSelect({
+  options = [],
+  groups = [],
+  value,
+  onChange,
+  placeholder = "Seleccionar...",
+  searchPlaceholder = "Buscar...",
+  disabled = false,
+  keepOpenOnSelect = false,
+  clearable = false,
+  inputClassName = "",
+  className = "",
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(-1);
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+
+  const selected = useMemo(() => {
+    for (const o of options) {
+      if (String(o.value) === String(value)) return o;
+    }
+    for (const g of groups) {
+      const found = g.options.find((o) => String(o.value) === String(value));
+      if (found) return found;
+    }
+    return null;
+  }, [options, groups, value]);
+
+  // Lista plana con encabezados intercalados para render y navegación por teclado.
+  // En modo agrupado, la búsqueda matchea también el label del grupo (nombre de la serie).
+  const flatItems = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    const match = (text) => !t || String(text || "").toLowerCase().includes(t);
+    if (groups.length) {
+      const items = [];
+      groups.forEach((g) => {
+        const groupHits = match(g.label);
+        const opts = g.options.filter((o) => groupHits || match(o.label)).slice(0, 200);
+        if (groupHits || opts.length) {
+          items.push({ kind: "header", key: `h:${g.label}`, label: g.label });
+          opts.forEach((o) => items.push({ kind: "opt", ...o }));
+        }
+      });
+      return items;
+    }
+    const base = t ? options.filter((o) => match(o.label)) : options;
+    return base.slice(0, 200).map((o) => ({ kind: "opt", ...o }));
+  }, [options, groups, q]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, [open]);
+
+  const select = (opt) => {
+    if (opt.disabled) return;
+    onChange?.(opt.value);
+    setQ("");
+    setActive(-1);
+    setOpen(keepOpenOnSelect);
+    if (keepOpenOnSelect) {
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  };
+
+  const nextOpt = (from) => {
+    for (let i = from + 1; i < flatItems.length; i++) {
+      if (flatItems[i].kind === "opt") return i;
+    }
+    return flatItems.findIndex((it) => it.kind === "opt");
+  };
+  const prevOpt = (from) => {
+    for (let i = from - 1; i >= 0; i--) {
+      if (flatItems[i].kind === "opt") return i;
+    }
+    for (let i = flatItems.length - 1; i >= 0; i--) {
+      if (flatItems[i].kind === "opt") return i;
+    }
+    return -1;
+  };
+
+  const onKey = (e) => {
+    if (e.key === "Escape") { setOpen(false); return; }
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); setOpen(true); setActive(-1); }
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => nextOpt(a)); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => prevOpt(a)); return; }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const idx = active >= 0 ? active : flatItems.findIndex((it) => it.kind === "opt");
+      const opt = idx >= 0 ? flatItems[idx] : null;
+      if (opt && opt.kind === "opt") select(opt);
+      return;
+    }
+  };
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <input
+        ref={inputRef}
+        type="text"
+        className={`${inputClassName || inputCls}${clearable && !disabled && value && !open ? " pr-9" : ""}`}
+        value={open ? q : selected?.label || ""}
+        placeholder={open ? searchPlaceholder : selected ? undefined : placeholder}
+        disabled={disabled}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(-1); }}
+        onFocus={() => { setOpen(true); setQ(""); setActive(-1); }}
+        onKeyDown={onKey}
+        autoComplete="off"
+      />
+      {clearable && !disabled && value && !open ? (
+        <button
+          type="button"
+          aria-label="Limpiar selección"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { onChange?.(""); setQ(""); setActive(-1); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-foreground hover:bg-muted/60 transition-colors text-sm leading-none"
+        >
+          ✕
+        </button>
+      ) : null}
+      {open ? (
+        <div className="absolute z-40 mt-1 w-full max-h-64 overflow-y-auto rounded-[12px] border border-border bg-card shadow-xl p-1">
+          {flatItems.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-slate-400">Sin resultados</div>
+          ) : (
+            flatItems.map((it, i) =>
+              it.kind === "header" ? (
+                <div key={it.key} className="sticky top-0 z-10 bg-card px-3 pt-2 pb-1 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">
+                  {it.label}
+                </div>
+              ) : (
+                <button
+                  key={String(it.value)}
+                  type="button"
+                  disabled={it.disabled}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => select(it)}
+                  className={`w-full text-left px-3 py-2 rounded-[8px] text-xs font-bold transition-colors ${
+                    it.disabled
+                      ? "text-slate-400 cursor-not-allowed"
+                      : i === active
+                        ? "bg-blue-600 text-white"
+                        : "text-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  {it.label}
+                </button>
+              )
+            )
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function Btn({ children, onClick, variant = "primary", disabled, type = "button", className = "", sm, ...rest }) {
   const variants = {
     primary:
       "bg-blue-600 hover:bg-blue-500 text-white disabled:bg-blue-600/40",
@@ -109,6 +279,7 @@ export function Btn({ children, onClick, variant = "primary", disabled, type = "
       type={type}
       onClick={onClick}
       disabled={disabled}
+      {...rest}
       className={`inline-flex items-center justify-center gap-1.5 rounded-[12px] font-black uppercase tracking-[0.08em] transition-all ${sm ? "text-[10px] px-3 py-2" : "text-[11px] px-4 py-2.5"} ${variants[variant] || variants.primary} disabled:cursor-not-allowed ${className}`}
     >
       {children}

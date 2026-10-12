@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -26,18 +26,20 @@ export default function DashboardPage() {
   const [resumen, setResumen] = useState(null);
   const [error, setError] = useState("");
   const [modGroups, setModGroups] = useState(() => {
+    // Initialize from localStorage on client side to avoid hydration mismatch
     if (typeof window === "undefined") return [];
     try {
-      return getAccessibleModules(JSON.parse(window.localStorage.getItem("mwt_user") || "null"));
-    } catch {
-      return [];
-    }
+      const raw = window.localStorage.getItem("mwt_user");
+      if (raw) return getAccessibleModules(JSON.parse(raw));
+    } catch { /* ignore */ }
+    return [];
   });
   const kpis = resumen?.kpis;
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${typeof document !== "undefined" ? decodeURIComponent((document.cookie.match(/(^| )mwt_token=([^;]+)/) || [])[2] || "") : ""}` },
+    const token = typeof document !== "undefined" ? decodeURIComponent((document.cookie.match(/(^| )mwt_token=([^;]+)/) || [])[2] || "") : "";
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -55,19 +57,49 @@ export default function DashboardPage() {
     soporteApi.getResumenReportes().then(setResumen).catch((e) => setError(e?.message || "No se pudo cargar el resumen."));
   }, []);
 
+  if (modGroups.length === 0 && !resumen) {
+    return (
+      <main className="p-6 lg:p-8 space-y-9">
+        <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+          <Kpi icon={<Users size={15} />} label="Participantes" value="..." note="Pilotos registrados" accent="blue" />
+          <Kpi icon={<Flag size={15} />} label="Eventos" value="..." note="..." accent="violet" />
+          <Kpi icon={<Wallet size={15} />} label="Ingresos (Q)" value="..." note="Pagos confirmados" accent="green" />
+          <Kpi icon={<Bell size={15} />} label="Sanciones" value="..." note="Registradas en comisariato" accent="amber" />
+        </section>
+        <section>
+          <div className="mb-5">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 mb-1">Accesos rápidos</div>
+            <h2 className="text-lg font-black uppercase tracking-[0.04em] text-foreground">Módulos del sistema</h2>
+            <p className="text-xs text-slate-500 mt-1">Los módulos principales con sus subsecciones dependientes.</p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="bg-card border border-border rounded-[16px] p-5 animate-pulse space-y-3">
+              <div className="h-5 bg-muted rounded w-1/4"></div>
+              <div className="h-4 bg-muted rounded w-1/2"></div>
+              <div className="h-4 bg-muted rounded w-3/4"></div>
+            </div>
+            <div className="bg-card border border-border rounded-[16px] p-5 animate-pulse space-y-3">
+              <div className="h-5 bg-muted rounded w-1/4"></div>
+              <div className="h-4 bg-muted rounded w-1/2"></div>
+              <div className="h-4 bg-muted rounded w-3/4"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="p-6 lg:p-8 space-y-9">
       {error ? <p className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-[10px] px-3 py-2">{error}</p> : null}
 
-      {/* KPIs */}
       <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <Kpi icon={<Users size={15} />} label="Participantes" value={kpis ? String(kpis.participantes) : "..."} note="Pilotos registrados" accent="blue" />
-        <Kpi icon={<Flag size={15} />} label="Eventos" value={kpis ? String(kpis.eventos) : "..."} note={`${kpis?.proximos ?? "—"} próximos`} accent="violet" />
+        <Kpi icon={<Flag size={15} />} label="Eventos" value={kpis ? String(kpis.eventos) : "..."} note={`${kpis?.proximos ?? "?"} próximos`} accent="violet" />
         <Kpi icon={<Wallet size={15} />} label="Ingresos (Q)" value={kpis ? `Q${(kpis.ingresos || 0).toLocaleString("es-GT", { maximumFractionDigits: 0 })}` : "..."} note="Pagos confirmados" accent="green" />
         <Kpi icon={<Bell size={15} />} label="Sanciones" value={kpis ? String(kpis.sanciones) : "..."} note="Registradas en comisariato" accent="amber" />
       </section>
 
-      {/* Módulos */}
       <section>
         <div className="mb-5">
           <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 mb-1">Accesos rápidos</div>
@@ -118,7 +150,6 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Acceso rápido */}
       <section className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[20px] p-7 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-200 mb-2">Acceso rápido</div>

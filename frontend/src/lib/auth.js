@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function getCookie(name) {
   if (typeof document === "undefined") return null;
@@ -27,7 +27,7 @@ export function clearAuthSession() {
 }
 
 export async function loginRequest({ username, password }) {
-  const endpoints = ["/auth/login", "/api/auth/login", "/login"];
+  const endpoints = ["/api/auth/login"];
 
   let lastError = "No se pudo iniciar sesión.";
   for (const path of endpoints) {

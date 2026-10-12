@@ -6,8 +6,35 @@ import Link from "next/link";
 import styles from "../mantenimiento.module.css";
 import { createPiloto, deletePiloto, updatePiloto } from "@/lib/adminApi";
 import { getToken } from "@/lib/auth";
+import { TelField } from "@/components/fields";
+import { COUNTRIES, splitPhone } from "@/lib/formats";
+import { useConfirm } from "@/components/ConfirmProvider";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+function PwdInput({ value, onChange, className, error, ...props }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+      <input
+        className={`${className} ${error ? styles.inputError : ""}`}
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+        {...props}
+        style={{ paddingRight: 36 }}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow((v) => !v)}
+        style={{ position: "absolute", right: 10, border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#64748b", padding: 0 }}
+      >
+        {show ? "🙈" : "👁"}
+      </button>
+    </div>
+  );
+}
 
 const EMPTY_FORM = {
   nombre: "",
@@ -21,28 +48,6 @@ const EMPTY_FORM = {
 };
 
 const DORSAL_OPTIONS = Array.from({ length: 99 }, (_, index) => index + 1);
-
-const PAISES = [
-  { codigo: "GT", nombre: "Guatemala", dial: "+502", flag: "ðŸ‡¬ðŸ‡¹", min: 8, max: 8 },
-  { codigo: "SV", nombre: "El Salvador", dial: "+503", flag: "ðŸ‡¸ðŸ‡»", min: 8, max: 8 },
-  { codigo: "HN", nombre: "Honduras", dial: "+504", flag: "ðŸ‡­ðŸ‡³", min: 8, max: 8 },
-  { codigo: "NI", nombre: "Nicaragua", dial: "+505", flag: "ðŸ‡³ðŸ‡®", min: 8, max: 8 },
-  { codigo: "CR", nombre: "Costa Rica", dial: "+506", flag: "ðŸ‡¨ðŸ‡·", min: 8, max: 8 },
-  { codigo: "PA", nombre: "PanamÃ¡", dial: "+507", flag: "ðŸ‡µðŸ‡¦", min: 8, max: 8 },
-  { codigo: "BZ", nombre: "Belice", dial: "+501", flag: "ðŸ‡§ðŸ‡¿", min: 7, max: 7 },
-  { codigo: "MX", nombre: "MÃ©xico", dial: "+52", flag: "ðŸ‡²ðŸ‡½", min: 10, max: 10 },
-  { codigo: "US", nombre: "Estados Unidos", dial: "+1", flag: "ðŸ‡ºðŸ‡¸", min: 10, max: 10 },
-  { codigo: "CA", nombre: "CanadÃ¡", dial: "+1", flag: "ðŸ‡¨ðŸ‡¦", min: 10, max: 10 },
-  { codigo: "CO", nombre: "Colombia", dial: "+57", flag: "ðŸ‡¨ðŸ‡´", min: 10, max: 10 },
-  { codigo: "AR", nombre: "Argentina", dial: "+54", flag: "ðŸ‡¦ðŸ‡·", min: 10, max: 10 },
-  { codigo: "CL", nombre: "Chile", dial: "+56", flag: "ðŸ‡¨ðŸ‡±", min: 9, max: 9 },
-  { codigo: "PE", nombre: "PerÃº", dial: "+51", flag: "ðŸ‡µðŸ‡ª", min: 9, max: 9 },
-  { codigo: "VE", nombre: "Venezuela", dial: "+58", flag: "ðŸ‡»ðŸ‡ª", min: 10, max: 10 },
-  { codigo: "EC", nombre: "Ecuador", dial: "+593", flag: "ðŸ‡ªðŸ‡¨", min: 9, max: 9 },
-  { codigo: "DO", nombre: "Rep. Dominicana", dial: "+1", flag: "ðŸ‡©ðŸ‡´", min: 10, max: 10 },
-  { codigo: "ES", nombre: "EspaÃ±a", dial: "+34", flag: "ðŸ‡ªðŸ‡¸", min: 9, max: 9 },
-  { codigo: "IT", nombre: "Italia", dial: "+39", flag: "ðŸ‡®ðŸ‡¹", min: 9, max: 10 },
-];
 
 function decodeJwtSubject(token) {
   if (!token) return "";
@@ -58,6 +63,7 @@ function decodeJwtSubject(token) {
 }
 
 export default function PilotosMaintenancePage() {
+  const { confirm } = useConfirm();
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -72,9 +78,9 @@ export default function PilotosMaintenancePage() {
   const [savingRowIds, setSavingRowIds] = useState(new Set());
   const [deletingIds, setDeletingIds] = useState(new Set());
   const [returnToInscripciones, setReturnToInscripciones] = useState(false);
-  const [telefonoPais, setTelefonoPais] = useState("GT");
+  const [resetKey, setResetKey] = useState(0);
 
-  // ===== PAGINACIÃ“N =====
+  // ===== PAGINACIÓN =====
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(8);
 
@@ -83,10 +89,10 @@ export default function PilotosMaintenancePage() {
       nombre: "Nombre",
       apellido: "Apellido",
       email: "Correo",
-      password: "ContraseÃ±a",
+      password: "Contraseña",
       dpi: "DPI",
-      telefono_personal: "TelÃ©fono",
-      direccion: "DirecciÃ³n",
+      telefono_personal: "Teléfono",
+      direccion: "Dirección",
       dorsal_preferido: "Dorsal preferido",
     };
 
@@ -150,7 +156,7 @@ export default function PilotosMaintenancePage() {
     };
   }, []);
 
-  // 1) Filtrar por bÃºsqueda
+  // 1) Filtrar por búsqueda
   const filteredItems = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return items;
@@ -168,48 +174,30 @@ export default function PilotosMaintenancePage() {
     });
   }, [items, query]);
 
-  // 2) Resetear a pÃ¡gina 1 cuando cambia la bÃºsqueda
+  // 2) Resetear a página 1 cuando cambia la búsqueda
   useEffect(() => {
     setPage(1);
   }, [query]);
 
-  // 3) Cortar para la pÃ¡gina actual
+  // 3) Cortar para la página actual
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
   const paginatedItems = useMemo(() => {
     const start = (page - 1) * itemsPerPage;
     return filteredItems.slice(start, start + itemsPerPage);
   }, [filteredItems, page, itemsPerPage]);
 
-  const telefonoPaisInfo = useMemo(
-    () => PAISES.find((p) => p.codigo === telefonoPais) || PAISES[0],
-    [telefonoPais]
-  );
-
   const handleChange = (field, value) => {
     let processedValue = value;
 
     if (field === "nombre" || field === "apellido") {
-      processedValue = value.replace(/[^a-zA-ZÃ¡Ã©Ã­Ã³ÃºÃÃ‰ÃÃ“ÃšÃ±Ã‘Ã¼Ãœ\s'-]/g, "");
+      processedValue = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]/g, "");
     }
 
     if (field === "dpi") {
       processedValue = value.replace(/\D/g, "");
     }
 
-    if (field === "telefono_personal") {
-      processedValue = value.replace(/\D/g, "").slice(0, telefonoPaisInfo.max);
-    }
-
     setForm((current) => ({ ...current, [field]: processedValue }));
-  };
-
-  const handlePaisChange = (codigo) => {
-    const nuevoPais = PAISES.find((p) => p.codigo === codigo) || PAISES[0];
-    setTelefonoPais(codigo);
-    setForm((current) => ({
-      ...current,
-      telefono_personal: (current.telefono_personal || "").slice(0, nuevoPais.max),
-    }));
   };
 
   const resolveOperatorId = () => {
@@ -237,7 +225,7 @@ export default function PilotosMaintenancePage() {
     setError("");
     const resolvedOperatorId = resolveOperatorId();
     if (!resolvedOperatorId) {
-      setError("No hay operador cargado para auditorÃ­a. Inicia sesiÃ³n otra vez.");
+      setError("No hay operador cargado para auditoría. Inicia sesión otra vez.");
       return;
     }
 
@@ -280,13 +268,13 @@ export default function PilotosMaintenancePage() {
   };
 
   const handleDelete = async (item) => {
-    if (!confirm(`Â¿Eliminar piloto ${item.usuario?.nombre || ""} ${item.usuario?.apellido || ""}? Esta acciÃ³n lo desactiva.`)) return;
+    if (!(await confirm({ title: "Desactivar piloto", message: `¿Eliminar al piloto ${item.usuario?.nombre || ""} ${item.usuario?.apellido || ""}? Esta acción lo desactiva.`, confirmText: "Eliminar" }))) return;
 
     setMessage("");
     setError("");
     const resolvedOperatorId = resolveOperatorId();
     if (!resolvedOperatorId) {
-      setError("No hay operador cargado para auditorÃ­a. Inicia sesiÃ³n otra vez.");
+      setError("No hay operador cargado para auditoría. Inicia sesión otra vez.");
       return;
     }
 
@@ -309,6 +297,7 @@ export default function PilotosMaintenancePage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const fd = new FormData(event.currentTarget);
     setSaving(true);
     setMessage("");
     setError("");
@@ -317,16 +306,18 @@ export default function PilotosMaintenancePage() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email)) {
       setFieldErrors(["email"]);
-      setError("El correo electrÃ³nico no tiene un formato vÃ¡lido.");
+      setError("El correo electrónico no tiene un formato válido.");
       setSaving(false);
       return;
     }
 
-    if (form.telefono_personal) {
-      const telLength = form.telefono_personal.length;
-      if (telLength < telefonoPaisInfo.min || telLength > telefonoPaisInfo.max) {
+    const telefonoCompleto = String(fd.get("telefono_personal_completo") || "");
+    if (telefonoCompleto) {
+      const { code, number } = splitPhone(telefonoCompleto);
+      const paisInfo = COUNTRIES.find((c) => c.code === code) || COUNTRIES[0];
+      if (number.length !== paisInfo.national) {
         setFieldErrors(["telefono_personal"]);
-        setError(`El telÃ©fono de ${telefonoPaisInfo.nombre} debe tener ${telefonoPaisInfo.min === telefonoPaisInfo.max ? `${telefonoPaisInfo.min} dÃ­gitos` : `${telefonoPaisInfo.min} a ${telefonoPaisInfo.max} dÃ­gitos`}.`);
+        setError(`El teléfono de ${paisInfo.name} debe tener ${paisInfo.national} dígitos.`);
         setSaving(false);
         return;
       }
@@ -335,14 +326,12 @@ export default function PilotosMaintenancePage() {
     try {
       const resolvedOperatorId = operatorId || decodeJwtSubject(getToken());
       if (!resolvedOperatorId) {
-        throw new Error("No hay operador cargado para auditorÃ­a. Inicia sesiÃ³n otra vez.");
+        throw new Error("No hay operador cargado para auditoría. Inicia sesión otra vez.");
       }
 
       const nombreUpper = form.nombre.trim().toUpperCase();
       const apellidoUpper = form.apellido.trim().toUpperCase();
-      const telefonoCompleto = form.telefono_personal
-        ? `${telefonoPaisInfo.dial.replace("+", "")}${form.telefono_personal}`
-        : undefined;
+      const telefonoFinal = telefonoCompleto || undefined;
 
       const payload = {
         nombre: nombreUpper,
@@ -350,7 +339,7 @@ export default function PilotosMaintenancePage() {
         email: form.email.trim().toLowerCase(),
         password: form.password,
         dpi: form.dpi || undefined,
-        telefono_personal: telefonoCompleto,
+        telefono_personal: telefonoFinal,
         direccion: form.direccion || undefined,
         dorsal_preferido: form.dorsal_preferido ? Number(form.dorsal_preferido) : undefined,
         usuario_id: resolvedOperatorId,
@@ -373,7 +362,7 @@ export default function PilotosMaintenancePage() {
       ]);
 
       setForm(EMPTY_FORM);
-      setTelefonoPais("GT");
+      setResetKey((key) => key + 1);
       setMessage("Piloto guardado correctamente.");
 
       if (returnToInscripciones && pilotoId) {
@@ -410,7 +399,7 @@ export default function PilotosMaintenancePage() {
             if (found) {
               setItems((current) => [found, ...current.filter((it) => it.id !== found.id)]);
               setForm(EMPTY_FORM);
-              setTelefonoPais("GT");
+              setResetKey((key) => key + 1);
               setFieldErrors([]);
               setMessage('Piloto guardado correctamente.');
               if (returnToInscripciones && found.id) {
@@ -486,34 +475,18 @@ export default function PilotosMaintenancePage() {
             <input className={`${styles.input} ${fieldErrors.includes("email") ? styles.inputError : ""}`} type="email" value={form.email} onChange={(e) => handleChange("email", e.target.value)} required />
           </label>
           <label className={styles.field}>
-            <span className={styles.fieldLabel}>ContraseÃ±a *</span>
-            <input className={`${styles.input} ${fieldErrors.includes("password") ? styles.inputError : ""}`} type="password" value={form.password} onChange={(e) => handleChange("password", e.target.value)} required />
+            <span className={styles.fieldLabel}>Contraseña *</span>
+            <PwdInput className={`${styles.input} ${fieldErrors.includes("password") ? styles.inputError : ""}`} value={form.password} onChange={(e) => handleChange("password", e.target.value)} required />
           </label>
           <label className={styles.field}>
             <span className={styles.fieldLabel}>DPI</span>
             <input className={`${styles.input} ${fieldErrors.includes("dpi") ? styles.inputError : ""}`} value={form.dpi} onChange={(e) => handleChange("dpi", e.target.value)} maxLength={13} />
           </label>
+          <div className={styles.field}>
+            <TelField key={resetKey} name="telefono_personal" label="Teléfono" />
+          </div>
           <label className={styles.field}>
-            <span className={styles.fieldLabel}>TelÃ©fono</span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <select className={styles.input} value={telefonoPais} onChange={(e) => handlePaisChange(e.target.value)} style={{ width: 150, flexShrink: 0 }} title={telefonoPaisInfo.nombre}>
-                {PAISES.map((pais) => (
-                  <option key={pais.codigo} value={pais.codigo} title={pais.nombre}>{pais.flag} {pais.dial}</option>
-                ))}
-              </select>
-              <input
-                className={`${styles.input} ${fieldErrors.includes("telefono_personal") ? styles.inputError : ""}`}
-                value={form.telefono_personal}
-                onChange={(e) => handleChange("telefono_personal", e.target.value)}
-                placeholder={`${telefonoPaisInfo.max} dÃ­gitos, sin cÃ³digo`}
-                maxLength={telefonoPaisInfo.max}
-                style={{ flex: 1, minWidth: 0 }}
-              />
-            </div>
-            <span style={{ fontSize: 12, color: "#94a3b8" }}>PaÃ­s: {telefonoPaisInfo.flag} {telefonoPaisInfo.nombre} ({telefonoPaisInfo.dial}) Â· se guarda con cÃ³digo de paÃ­s.</span>
-          </label>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>DirecciÃ³n</span>
+            <span className={styles.fieldLabel}>Dirección</span>
             <input className={`${styles.input} ${fieldErrors.includes("direccion") ? styles.inputError : ""}`} value={form.direccion} onChange={(e) => handleChange("direccion", e.target.value)} />
           </label>
           <label className={styles.field}>
@@ -545,7 +518,7 @@ export default function PilotosMaintenancePage() {
         </div>
 
         <div className={styles.fakeTable}>
-          <div className={styles.tableHeader} style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+          <div className={styles.tableHeader} style={{ gridTemplateColumns: "repeat(4, minmax(140px, 1fr))" }}>
             <div className={styles.th}>Nombre</div>
             <div className={styles.th}>Correo</div>
             <div className={styles.th}>Dorsal preferido</div>
@@ -555,18 +528,18 @@ export default function PilotosMaintenancePage() {
             {paginatedItems.length === 0 ? (
               <div className={styles.emptyState}>No hay pilotos registrados.</div>
             ) : paginatedItems.map((item) => (
-              <div key={item.id} className={styles.tr} style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+              <div key={item.id} className={styles.tr} style={{ gridTemplateColumns: "repeat(4, minmax(140px, 1fr))" }}>
                 <div className={styles.td}>
                   {editingId === item.id ? (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <input className={styles.input} style={{ minWidth: 120 }} value={editForm.nombre} onChange={(e) => setEditForm((f) => ({ ...f, nombre: e.target.value.replace(/[^a-zA-ZÃ¡Ã©Ã­Ã³ÃºÃÃ‰ÃÃ“ÃšÃ±Ã‘Ã¼Ãœ\s'-]/g, "") }))} />
-                      <input className={styles.input} style={{ minWidth: 120 }} value={editForm.apellido} onChange={(e) => setEditForm((f) => ({ ...f, apellido: e.target.value.replace(/[^a-zA-ZÃ¡Ã©Ã­Ã³ÃºÃÃ‰ÃÃ“ÃšÃ±Ã‘Ã¼Ãœ\s'-]/g, "") }))} />
+                      <input className={styles.input} style={{ minWidth: 120 }} value={editForm.nombre} onChange={(e) => setEditForm((f) => ({ ...f, nombre: e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]/g, "") }))} />
+                      <input className={styles.input} style={{ minWidth: 120 }} value={editForm.apellido} onChange={(e) => setEditForm((f) => ({ ...f, apellido: e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]/g, "") }))} />
                     </div>
                   ) : (
                     <>{item.usuario?.nombre} {item.usuario?.apellido}</>
                   )}
                 </div>
-                <div className={styles.td}>{item.usuario?.email || "â€”"}</div>
+                <div className={styles.td}>{item.usuario?.email || "—"}</div>
                 <div className={styles.td}>
                   {editingId === item.id ? (
                     <select className={styles.input} value={editForm.dorsal_preferido} onChange={(e) => setEditForm((f) => ({ ...f, dorsal_preferido: e.target.value }))}>
@@ -576,7 +549,7 @@ export default function PilotosMaintenancePage() {
                       ))}
                     </select>
                   ) : (
-                    <>{item.dorsal_preferido ?? "â€”"}</>
+                    <>{item.dorsal_preferido ?? "—"}</>
                   )}
                 </div>
                 <div className={styles.td}>
@@ -605,7 +578,7 @@ export default function PilotosMaintenancePage() {
           </div>
         </div>
 
-        {/* ===== CONTROLES DE PAGINACIÃ“N ===== */}
+        {/* ===== CONTROLES DE PAGINACIÓN ===== */}
         {filteredItems.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginTop: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -621,10 +594,10 @@ export default function PilotosMaintenancePage() {
                 <option value={10}>10</option>
                 <option value={20}>20</option>
               </select>
-              <span style={{ fontSize: 13, color: "#475569" }}>por pÃ¡gina</span>
+              <span style={{ fontSize: 13, color: "#475569" }}>por página</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -665,7 +638,7 @@ export default function PilotosMaintenancePage() {
             </div>
 
             <span style={{ fontSize: 13, color: "#475569" }}>
-              PÃ¡gina {page} de {totalPages} ({filteredItems.length} resultados)
+              Página {page} de {totalPages} ({filteredItems.length} resultados)
             </span>
           </div>
         )}

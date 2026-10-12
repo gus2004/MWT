@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getParrillaEventoCategoria } from "@/lib/clasificacionesApi";
+import { SearchSelect } from "@/components/kit";
 import styles from "./inscripciones.module.css";
 
 const STATE_COLORS = {
@@ -120,7 +121,7 @@ function BarChart({ title, subtitle, items }) {
           items.map((item) => {
             const pct = Math.round((item.value / max) * 100);
             return (
-              <div key={item.label} className={styles.barRow}>
+              <div key={item.id || item.label} className={styles.barRow}>
                 <div className={styles.barMeta}>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
@@ -156,7 +157,7 @@ function MiniBarChart({ title, subtitle, items }) {
       ) : (
         <div className={styles.sparkBars}>
           {items.map((item) => (
-            <div key={item.label} className={styles.sparkBarItem} title={`${item.label}: ${item.value}`}>
+            <div key={item.id || item.label} className={styles.sparkBarItem} title={`${item.label}: ${item.value}`}>
               <div className={styles.sparkBarLabel}>{item.label}</div>
               <div className={styles.sparkBarTrack}>
                 <div className={styles.sparkBarFill} style={{ height: `${Math.max(10, Math.round((item.value / max) * 100))}%`, background: item.color || "linear-gradient(180deg, #0ea5a4, #2563eb)" }} />
@@ -210,7 +211,7 @@ function TimeRankingChart({ title, subtitle, items }) {
   );
 }
 
-export default function InscripcionesAnalytics({ inscripciones = [] }) {
+export default function InscripcionesAnalytics({ inscripciones = [], eventGroups = [] }) {
   const [filters, setFilters] = useState({
     query: "",
     estado: "",
@@ -222,15 +223,13 @@ export default function InscripcionesAnalytics({ inscripciones = [] }) {
   const [bestTimesError, setBestTimesError] = useState("");
   const [bestTimes, setBestTimes] = useState([]);
 
-  const eventoOptions = useMemo(() => getUniqueOptions(inscripciones, (item) => ({
-    id: String(item.evento?.id || item.evento_id || ""),
-    label: item.evento?.nombre || `Evento ${item.evento_id || ""}`,
-  })), [inscripciones]);
-
-  const categoriaOptions = useMemo(() => getUniqueOptions(inscripciones, (item) => ({
-    id: String(item.categoria?.id || item.categoria_id || ""),
-    label: item.categoria?.nombre || `Categoría ${item.categoria_id || ""}`,
-  })), [inscripciones]);
+  const categoriaOptions = useMemo(() => getUniqueOptions(
+    inscripciones.filter((item) => !filters.evento || String(item.evento?.id || item.evento_id || "") === filters.evento),
+    (item) => ({
+      id: String(item.categoria?.id || item.categoria_id || ""),
+      label: item.categoria?.nombre || `Categoría ${item.categoria_id || ""}`,
+    })
+  ), [inscripciones, filters.evento]);
 
   const dorsalOptions = useMemo(() => {
     const seen = new Set();
@@ -386,7 +385,7 @@ export default function InscripcionesAnalytics({ inscripciones = [] }) {
       const id = String(item.categoria?.id || item.categoria_id || "");
       if (!id) return;
       const label = item.categoria?.nombre || `Categoría ${id}`;
-      counts.set(id, { label, value: (counts.get(id)?.value || 0) + 1 });
+      counts.set(id, { id, label, value: (counts.get(id)?.value || 0) + 1 });
     });
     return Array.from(counts.values()).sort((a, b) => b.value - a.value).slice(0, 8);
   }, [filtered]);
@@ -397,7 +396,7 @@ export default function InscripcionesAnalytics({ inscripciones = [] }) {
       const id = String(item.piloto?.id || item.piloto_id || "");
       if (!id) return;
       const label = `${item.piloto?.usuario?.nombre || ""} ${item.piloto?.usuario?.apellido || ""}`.trim() || `Piloto ${id}`;
-      counts.set(id, { label, value: (counts.get(id)?.value || 0) + 1 });
+      counts.set(id, { id, label, value: (counts.get(id)?.value || 0) + 1 });
     });
     return Array.from(counts.values()).sort((a, b) => b.value - a.value).slice(0, 8);
   }, [filtered]);
@@ -466,6 +465,7 @@ export default function InscripcionesAnalytics({ inscripciones = [] }) {
       .sort((a, b) => a.mejorMs - b.mejorMs)
       .slice(0, 8)
       .map((item) => ({
+        id: item.categoriaId,
         label: item.categoriaNombre,
         value: item.mejorMs,
         color: "linear-gradient(90deg, #0ea5a4, #2563eb)",
@@ -526,10 +526,7 @@ export default function InscripcionesAnalytics({ inscripciones = [] }) {
           <option value="">Todos los estados</option>
           {Object.entries(STATE_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
-        <select className={styles.input} value={filters.evento} onChange={(e) => setFilters((current) => ({ ...current, evento: e.target.value }))}>
-          <option value="">Todos los eventos</option>
-          {eventoOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-        </select>
+        <SearchSelect clearable groups={eventGroups} value={filters.evento || ""} onChange={(v) => setFilters((current) => ({ ...current, evento: v, ...(v !== current.evento ? { categoria: "" } : {}) }))} placeholder="Todos los eventos" searchPlaceholder="Buscar evento o campeonato..." className="w-full" inputClassName={styles.input} />
         <select className={styles.input} value={filters.categoria} onChange={(e) => setFilters((current) => ({ ...current, categoria: e.target.value }))}>
           <option value="">Todas las categorías</option>
           {categoriaOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -660,9 +657,9 @@ export default function InscripcionesAnalytics({ inscripciones = [] }) {
           title="Récord por categoría"
           subtitle="La mejor marca registrada en cada categoría visible."
           items={bestTimesByCategory.map((item) => ({
+            ...item,
             label: `${item.label} · ${item.mejorTiempo}`,
             value: Math.max(...bestTimesByCategory.map((candidate) => candidate.value), 1) - item.value,
-            color: item.color,
           }))}
         />
       </div>

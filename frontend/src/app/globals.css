@@ -16,9 +16,9 @@
   --mwt-primary: #67e8f9;
   --mwt-primary-foreground: #08111f;
   --mwt-muted: rgba(255, 255, 255, 0.06);
-  --mwt-sidebar: #0f172a;
-  --mwt-sidebar-text: #94a3b8;
-  --mwt-sidebar-accent: #67e8f9;
+  --mwt-sidebar: #ffffff;
+  --mwt-sidebar-text: #475569;
+  --mwt-sidebar-accent: #2563eb;
 }
 
 html[data-theme="light"] {
@@ -31,9 +31,9 @@ html[data-theme="light"] {
   --mwt-primary: #2563eb;
   --mwt-primary-foreground: #ffffff;
   --mwt-muted: rgba(0, 0, 0, 0.04);
-  --mwt-sidebar: #0f172a;
-  --mwt-sidebar-text: #94a3b8;
-  --mwt-sidebar-accent: #67e8f9;
+  --mwt-sidebar: #ffffff;
+  --mwt-sidebar-text: #475569;
+  --mwt-sidebar-accent: #2563eb;
 }
 
 @theme {

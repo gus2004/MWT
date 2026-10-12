@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { createClasificacion, deleteClasificacion, getParrillaEventoCategoria, listClasificaciones, saveClasificacionTiempoEvento } from "@/lib/clasificacionesApi";
 import TablaClasificacionOficial from "./TablaClasificacionOficial";
 import styles from "./clasificaciones.module.css";
+import { SearchSelect } from "@/components/kit";
+import { useConfirm } from "@/components/ConfirmProvider";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function StatCard({ label, value }) {
   return (
@@ -41,6 +43,7 @@ function formatMsToTime(ms) {
 }
 
 export default function Clasificaciones() {
+  const { confirm } = useConfirm();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -119,6 +122,32 @@ export default function Clasificaciones() {
   }, [items]);
 
   const eventoOptions = options.eventos;
+
+  const eventoGroups = useMemo(() => {
+    const map = {};
+    eventoOptions.forEach((ev) => {
+      const key = ev.campeonato_nombre || "Sin campeonato";
+      (map[key] = map[key] || []).push(ev);
+    });
+    return Object.keys(map)
+      .sort((a, b) => a.localeCompare(b))
+      .map((label) => ({
+        label,
+        options: map[label]
+          .slice()
+          .sort((a, b) => {
+            const ta = a.fecha_inicio ? new Date(a.fecha_inicio).getTime() : Infinity;
+            const tb = b.fecha_inicio ? new Date(b.fecha_inicio).getTime() : Infinity;
+            return ta - tb;
+          })
+          .map((ev) => ({
+            value: String(ev.id),
+            label: ev.fecha_inicio
+              ? `${ev.nombre} · ${new Date(ev.fecha_inicio).toLocaleDateString("es-GT", { day: "2-digit", month: "short" })}`
+              : ev.nombre,
+          })),
+      }));
+  }, [eventoOptions]);
 
   const categoriaOptions = useMemo(() => {
     if (!eventoId) return options.categorias;
@@ -352,6 +381,7 @@ export default function Clasificaciones() {
 
   // ─── Eliminar ────────────────────────────────────────────
   const handleDelete = async (id) => {
+    if (!(await confirm({ title: "Eliminar clasificación", message: "¿Eliminar esta clasificación? Esta acción no se puede deshacer.", confirmText: "Eliminar" }))) return;
     setError("");
     try {
       await deleteClasificacion(id);
@@ -427,19 +457,9 @@ export default function Clasificaciones() {
 
               {/* Selectores */}
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
-                <select
-                  className={styles.input}
-                  value={eventoId}
-                  onChange={(e) => handleEventoChange(e.target.value)}
-                  style={{ minWidth: 280 }}
-                >
-                  <option value="">(Seleccionar evento)</option>
-                  {eventoOptions.map((evento) => (
-                    <option key={evento.id} value={evento.id}>
-                      {evento.nombre} {evento.campeonato_nombre ? `- ${evento.campeonato_nombre}` : ""}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ minWidth: 280 }}>
+                  <SearchSelect groups={eventoGroups} value={eventoId || ""} onChange={(v) => handleEventoChange(v)} placeholder="(Seleccionar evento)" searchPlaceholder="Buscar por nombre o campeonato..." inputClassName={styles.input} />
+                </div>
                 <select
                   className={styles.input}
                   value={categoriaForAdd}
@@ -724,15 +744,9 @@ export default function Clasificaciones() {
                 <option value="">Selecciona una categoría</option>
                 {categoriaOptions.map((c) => <option key={c.id} value={c.id}>{c.nombre || c.label || c.id}</option>)}
               </select>
-              <select
-                className={styles.input}
-                value={eventoId}
-                onChange={(e) => { handleEventoChange(e.target.value); setFilterCategoria(""); setPage(1); }}
-                style={{ minWidth: 220, color: "#0f172a" }}
-              >
-                <option value="">Filtrar por evento</option>
-                {eventoOptions.map((evento) => <option key={evento.id} value={evento.id}>{evento.nombre}</option>)}
-              </select>
+              <div style={{ minWidth: 220 }}>
+                <SearchSelect clearable groups={eventoGroups} value={eventoId || ""} onChange={(v) => { handleEventoChange(v); setFilterCategoria(""); setPage(1); }} placeholder="Filtrar por evento" searchPlaceholder="Buscar evento..." inputClassName={styles.input} />
+              </div>
               <button
                 type="button"
                 className={styles.secondaryBtn}
@@ -830,7 +844,7 @@ export default function Clasificaciones() {
                     </select>
                     <span style={{ fontSize: 13, color: "#475569" }}>por página</span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
                     <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(148,163,184,0.3)", background: "#fff", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.5 : 1, fontSize: 13 }}>Anterior</button>
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                       <button key={p} type="button" onClick={() => setPage(p)} style={{ padding: "6px 12px", borderRadius: 6, border: p === page ? "1px solid #0ea5a4" : "1px solid rgba(148,163,184,0.3)", background: p === page ? "#0ea5a4" : "#fff", color: p === page ? "#fff" : "#0f172a", cursor: "pointer", fontSize: 13, minWidth: 34 }}>{p}</button>

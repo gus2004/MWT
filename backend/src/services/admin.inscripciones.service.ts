@@ -255,7 +255,7 @@ export async function updateInscripcionStatus(inscripcionId: string, updates: { 
       }
 
       await prisma.auditoria.create({ data: auditPayload });
-    } catch (auditErr) {
+    } catch (auditErr: any) {
       // Audit failure should not block the main operation; log and continue
       // Use console.error so dev logs capture the cause
       // If you want to surface this to the client, change to rethrow

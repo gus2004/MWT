@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Gavel, Plus, Shield } from "lucide-react";
 import { Badge, Btn, Empty, Field, Modal, Tabs, inputCls, selectCls } from "@/components/kit";
 import { soporteApi, getCurrentUser } from "@/lib/soporteApi";
 import { getPublicInscripciones } from "@/lib/publicApi";
+import { useConfirm } from "@/components/ConfirmProvider";
 
 const ESTADO_BADGE = {
   PENDIENTE: ["blue", "Pendiente"],
@@ -26,6 +27,7 @@ const EST_REVISION = {
 };
 
 export default function ComisarioPage() {
+  const { confirm } = useConfirm();
   const [tab, setTab] = useState("infracciones");
   const [sanciones, setSanciones] = useState([]);
   const [apelaciones, setApelaciones] = useState([]);
@@ -112,7 +114,7 @@ export default function ComisarioPage() {
   };
 
   const resolver = async (s) => {
-    if (!confirm("¿Resolver esta infracción y aplicar la sanción?")) return;
+    if (!(await confirm({ title: "Resolver infracción", message: "¿Resolver esta infracción y aplicar la sanción? Esta acción no se puede deshacer.", confirmText: "Resolver" }))) return;
     try {
       await soporteApi.updateSancion(s.id, { estado: "RESUELTO" });
       setNotice(`Sanción aplicada a ${s.piloto ? `#${s.piloto.dorsal_asignado}` : ""}.`);
@@ -123,7 +125,7 @@ export default function ComisarioPage() {
   };
 
   const decidirApelacion = async (a, estado) => {
-    if (!confirm(`¿${estado === "ACEPTADA" ? "Aceptar" : "Rechazar"} la apelación?`)) return;
+    if (!(await confirm({ title: estado === "ACEPTADA" ? "Aceptar apelación" : "Rechazar apelación", message: `¿${estado === "ACEPTADA" ? "Aceptar" : "Rechazar"} la apelación? Esta acción no se puede deshacer.`, confirmText: estado === "ACEPTADA" ? "Aceptar" : "Rechazar", danger: estado === "ACEPTADA" ? false : true }))) return;
     try {
       await soporteApi.updateApelacion(a.id, {
         estado,
@@ -284,7 +286,7 @@ export default function ComisarioPage() {
                   <div className="text-sm font-bold text-foreground mb-1">
                     {piloto ? `${piloto.nombre} ${piloto.apellido}` : "—"} · #{a.inscripcion?.dorsal_asignado || "—"}
                   </div>
-                  <p className="text-xs text-slate-500 italic mb-3">"{a.motivo}"</p>
+                  <p className="text-xs text-slate-500 italic mb-3">&ldquo;{a.motivo}&rdquo;</p>
                   {a.estado === "PENDIENTE" ? (
                     <div className="flex gap-2">
                       <Btn sm variant="success" onClick={() => decidirApelacion(a, "ACEPTADA")}>Aceptar</Btn>

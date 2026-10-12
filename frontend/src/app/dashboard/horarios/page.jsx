@@ -2,10 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Clock } from "lucide-react";
-import { Badge, Btn, Card, Empty, Field, Modal, inputCls } from "@/components/kit";
+import { Badge, Btn, Card, Empty, Field, Modal, SearchSelect, inputCls } from "@/components/kit";
 import { listEventos } from "@/lib/adminApi";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+function authHeaders() {
+  let token = "";
+  if (typeof document !== "undefined") {
+    const m = document.cookie.match(/(^| )mwt_token=([^;]+)/);
+    if (m) token = decodeURIComponent(m[2]);
+  }
+  return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
 
 const EST_BADGE = {
   BORRADOR: ["slate", "Borrador"],
@@ -37,7 +46,7 @@ export default function HorariosPage() {
   useEffect(() => {
     if (!eventoId) { setCron([]); return; }
     setLoading(true);
-    fetch(`${API_URL}/api/eventos/${eventoId}/cronograma`)
+    fetch(`${API_URL}/api/eventos/${eventoId}/cronograma`, { headers: authHeaders() })
       .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then((d) => setCron(d?.items || []))
       .catch((e) => setError(e?.message || "No se pudo cargar el cronograma."))
@@ -45,6 +54,32 @@ export default function HorariosPage() {
   }, [eventoId]);
 
   const evento = eventos.find((e) => e.id === eventoId);
+
+  const eventoGroups = useMemo(() => {
+    const map = {};
+    eventos.forEach((ev) => {
+      const key = ev.campeonato?.nombre || "Sin campeonato";
+      (map[key] = map[key] || []).push(ev);
+    });
+    return Object.keys(map)
+      .sort((a, b) => a.localeCompare(b))
+      .map((label) => ({
+        label,
+        options: map[label]
+          .slice()
+          .sort((a, b) => {
+            const ta = a.fecha_inicio ? new Date(a.fecha_inicio).getTime() : Infinity;
+            const tb = b.fecha_inicio ? new Date(b.fecha_inicio).getTime() : Infinity;
+            return ta - tb;
+          })
+          .map((ev) => ({
+            value: String(ev.id),
+            label: ev.fecha_inicio
+              ? `${ev.nombre} · ${new Date(ev.fecha_inicio).toLocaleDateString("es-GT", { day: "2-digit", month: "short" })}`
+              : ev.nombre,
+          })),
+      }));
+  }, [eventos]);
 
   const porDia = useMemo(() => {
     const map = {};
@@ -78,7 +113,7 @@ export default function HorariosPage() {
       setNotice("Actividad agregada al cronograma.");
       setNueva(false);
       setDraft({});
-      const d2 = await fetch(`${API_URL}/api/eventos/${eventoId}/cronograma`).then((r) => r.json());
+      const d2 = await fetch(`${API_URL}/api/eventos/${eventoId}/cronograma`, { headers: authHeaders() }).then((r) => r.json());
       setCron(d2?.items || []);
     } catch (err) {
       setError(err?.message || "No se pudo guardar la actividad.");
@@ -102,10 +137,7 @@ export default function HorariosPage() {
 
       <Card>
         <Field label="Evento">
-          <select className={inputCls} value={eventoId} onChange={(e) => setEventoId(e.target.value)}>
-            <option value="">Seleccionar evento</option>
-            {eventos.map((ev) => <option key={ev.id} value={ev.id}>{ev.nombre}</option>)}
-          </select>
+          <SearchSelect groups={eventoGroups} value={eventoId || ""} onChange={(v) => setEventoId(v)} placeholder="Seleccionar evento" searchPlaceholder="Buscar por nombre o campeonato..." />
         </Field>
       </Card>
 

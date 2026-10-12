@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Zap } from "lucide-react";
-import { Badge, Btn, Card, Empty, Field, Modal, Paginator, Table, inputCls, selectCls } from "@/components/kit";
+import { Badge, Btn, Card, Empty, Field, Modal, Paginator, SearchSelect, Table, inputCls, selectCls } from "@/components/kit";
 import { NumberField } from "@/components/fields";
 import { getPilotoPublicDetail, createMotocicleta } from "@/lib/adminApi";
 import { getCurrentUser } from "@/lib/soporteApi";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export default function MotosPage() {
   const [pilotos, setPilotos] = useState([]);
@@ -124,6 +124,48 @@ export default function MotosPage() {
         </div>
       </div>
 
+      <Card title="Registrar motocicleta" sub="Se asigna al piloto seleccionado y queda disponible para inscripciones.">
+        {pilotos.length === 0 ? (
+          <Empty title="No hay pilotos" sub="Registrá pilotos primero." />
+        ) : (
+          <form onSubmit={agregarMoto} className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <Field label="Piloto">
+              <SearchSelect
+                options={pilotos.map((p) => ({
+                  value: p.id,
+                  label: `${[p.usuario?.nombre, p.usuario?.apellido].filter(Boolean).join(" ")} · dorsal ${p.dorsal_preferido ?? "—"}`.trim(),
+                }))}
+                value={modal?.id || ""}
+                onChange={(v) => {
+                  const p = pilotos.find((x) => String(x.id) === String(v));
+                  setModal(p || null);
+                }}
+                placeholder="Seleccionar piloto"
+                searchPlaceholder="Buscar por nombre..."
+                className="w-full"
+              />
+            </Field>
+            <Field label="Marca">
+              <select name="marca_id" className={selectCls} required>
+                <option value="">Seleccionar</option>
+                {marcas.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+              </select>
+            </Field>
+            <Field label="Modelo"><input name="modelo" className={inputCls} required placeholder="Ej. CBR 600RR" /></Field>
+            <NumberField name="anio" label="Año" min={1900} max={2030} maxLength={4} required />
+            <NumberField name="cilindrada" label="Cilindrada real (cc)" min={50} max={2500} maxLength={4} required />
+            <Field label="VIN"><input name="vin" className={inputCls} /></Field>
+            <Field label="Color"><input name="color" className={inputCls} /></Field>
+            <Field label="Apodo"><input name="apodo" className={inputCls} /></Field>
+            <div className="flex items-end">
+              <Btn variant="gradient" type="submit" disabled={saving || !modal} className="w-full">
+                {saving ? "Guardando..." : "+ Registrar moto"}
+              </Btn>
+            </div>
+          </form>
+        )}
+      </Card>
+
       <div className="flex gap-2 flex-wrap items-center">
         <input className={`${inputCls} max-w-xs`} placeholder="Buscar por piloto, marca o modelo..." value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         <select className={`${selectCls} max-w-[180px]`} value={filtroMarca} onChange={(e) => { setFiltroMarca(e.target.value); setPage(1); }}>
@@ -159,48 +201,6 @@ export default function MotosPage() {
           <Paginator page={page} totalPages={totalPages} onChange={setPage} total={filtered.length} shown={pageItems.length} />
         </Card>
       )}
-
-      <Card title="Registrar motocicleta" sub="Se asigna al piloto seleccionado y queda disponible para inscripciones.">
-        {pilotos.length === 0 ? (
-          <Empty title="No hay pilotos" sub="Registrá pilotos primero." />
-        ) : (
-          <form onSubmit={agregarMoto} className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <Field label="Piloto">
-              <select
-                className={selectCls}
-                value={modal?.id || ""}
-                onChange={(e) => {
-                  const p = pilotos.find((x) => x.id === e.target.value);
-                  setModal(p || null);
-                }}
-                required
-              >
-                <option value="">Seleccionar piloto</option>
-                {pilotos.map((p) => (
-                  <option key={p.id} value={p.id}>{p.usuario?.nombre} {p.usuario?.apellido} · dorsal {p.dorsal_preferido ?? "—"}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Marca">
-              <select name="marca_id" className={selectCls} required>
-                <option value="">Seleccionar</option>
-                {marcas.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-              </select>
-            </Field>
-            <Field label="Modelo"><input name="modelo" className={inputCls} required placeholder="Ej. CBR 600RR" /></Field>
-            <NumberField name="anio" label="Año" min={1900} max={2030} maxLength={4} required />
-            <NumberField name="cilindrada" label="Cilindrada real (cc)" min={50} max={2500} maxLength={4} required />
-            <Field label="VIN"><input name="vin" className={inputCls} /></Field>
-            <Field label="Color"><input name="color" className={inputCls} /></Field>
-            <Field label="Apodo"><input name="apodo" className={inputCls} /></Field>
-            <div className="flex items-end">
-              <Btn variant="gradient" type="submit" disabled={saving || !modal} className="w-full">
-                {saving ? "Guardando..." : "+ Registrar moto"}
-              </Btn>
-            </div>
-          </form>
-        )}
-      </Card>
 
       <Modal
         open={Boolean(modal && modal._motoOpen)}

@@ -108,7 +108,8 @@ export function TelField({
     <Field label={label} error={error}>
       <div className="flex gap-2">
         <select
-          className={`${selectCls} w-[132px] shrink-0`}
+          className={`${selectCls.replace(" w-full", "").trim()} shrink-0`}
+          style={{ width: 132 }}
           value={country}
           onChange={(e) => setCountry(e.target.value)}
           aria-label="Código de país"

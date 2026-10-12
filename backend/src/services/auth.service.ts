@@ -136,6 +136,10 @@ export async function login(input: LoginInput) {
 
   if (!usuario) throw new Error('Credenciales inválidas');
 
+  if (!usuario.esta_activo) {
+    throw new Error('Tu cuenta está inactiva. Contacta al administrador para reactivarla.');
+  }
+
   const ok = await bcrypt.compare(password, usuario.password);
   let migratedLegacyPassword = false;
 

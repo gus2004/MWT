@@ -1,10 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import styles from "./inscripciones.module.css";
+import { SearchSelect } from "@/components/kit";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { createInscripcion, createMotocicleta, deleteInscripcion, getPilotoPublicDetail, updateInscripcion } from "@/lib/adminApi";
 import InscripcionesAnalytics from "./InscripcionesAnalytics";
+import InscripcionesReportes from "./InscripcionesReportes";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function InfoCard({ label, value }) {
   return (
@@ -32,6 +35,13 @@ function toArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function fmtEventoFecha(fecha) {
+  if (!fecha) return "";
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("es-GT", { weekday: "short", day: "2-digit", month: "short" });
+}
+
 const EMPTY_DRAFT = {
   evento_id: "",
   categoria_id: "",
@@ -52,6 +62,7 @@ const EMPTY_MOTO_DRAFT = {
 };
 
 export default function Inscripciones() {
+  const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [inscripciones, setInscripciones] = useState([]);
@@ -60,6 +71,8 @@ export default function Inscripciones() {
   const [filterEvento, setFilterEvento] = useState("");
   const [filterCategoria, setFilterCategoria] = useState("");
   const [filterDorsal, setFilterDorsal] = useState("");
+  const [sortField, setSortField] = useState("fecha_registro");
+  const [sortDirection, setSortDirection] = useState("desc");
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(8);
   const [saving, setSaving] = useState(false);
@@ -76,6 +89,7 @@ export default function Inscripciones() {
   const [showMotoModal, setShowMotoModal] = useState(false);
   const [savingMoto, setSavingMoto] = useState(false);
   const [motoDraft, setMotoDraft] = useState(EMPTY_MOTO_DRAFT);
+  const [pdfPreview, setPdfPreview] = useState(null);
 
   const openPilotoInfo = async (pilotoId) => {
     if (!pilotoId) return;
@@ -194,7 +208,36 @@ export default function Inscripciones() {
   };
 
   const optionsByEvent = useMemo(() => toArray(options.eventos), [options.eventos]);
+  const eventGroups = useMemo(() => {
+    const map = {};
+    optionsByEvent.forEach((ev) => {
+      const key = ev.campeonato_nombre || "Sin campeonato";
+      (map[key] = map[key] || []).push(ev);
+    });
+    return Object.keys(map)
+      .sort((a, b) => a.localeCompare(b))
+      .map((label) => ({
+        label,
+        options: map[label]
+          .slice()
+          .sort((a, b) => {
+            const ta = a.fecha_inicio ? new Date(a.fecha_inicio).getTime() : Infinity;
+            const tb = b.fecha_inicio ? new Date(b.fecha_inicio).getTime() : Infinity;
+            return ta - tb;
+          })
+          .map((ev) => ({
+            value: String(ev.id),
+            label: `${ev.nombre}${fmtEventoFecha(ev.fecha_inicio) ? ` · ${fmtEventoFecha(ev.fecha_inicio)}` : ""}`,
+          })),
+      }));
+  }, [optionsByEvent]);
   const optionsByCategory = useMemo(() => toArray(options.categorias), [options.categorias]);
+  const categoriasDisponibles = useMemo(() => {
+    const evento = optionsByEvent.find((e) => String(e.id) === String(draft.evento_id));
+    if (!evento?.campeonato_id || !optionsByCategory.length) return optionsByCategory;
+    const filtered = optionsByCategory.filter((c) => String(c.campeonato_id) === String(evento.campeonato_id));
+    return filtered.length ? filtered : optionsByCategory;
+  }, [optionsByEvent, optionsByCategory, draft.evento_id]);
   const optionsByPilot = useMemo(() => toArray(options.pilotos), [options.pilotos]);
   const optionsByMoto = useMemo(() => toArray(options.motocicletas), [options.motocicletas]);
   const stats = useMemo(() => {
@@ -234,10 +277,41 @@ export default function Inscripciones() {
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
 
+  const sortedItems = useMemo(() => {
+    const getValue = (item) => {
+      if (sortField === "piloto") return `${item.piloto?.usuario?.nombre || ""} ${item.piloto?.usuario?.apellido || ""}`.trim();
+      if (sortField === "evento") return item.evento?.nombre || "";
+      if (sortField === "categoria") return item.categoria?.nombre || "";
+      if (sortField === "dorsal") return Number(item.dorsal_asignado || 0);
+      if (sortField === "estado") return item.estado || "";
+      return new Date(item.fecha_registro || 0).getTime() || 0;
+    };
+
+    return [...filteredItems].sort((a, b) => {
+      const left = getValue(a);
+      const right = getValue(b);
+      const comparison = typeof left === "number" && typeof right === "number"
+        ? left - right
+        : String(left).localeCompare(String(right), "es", { sensitivity: "base" });
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [filteredItems, sortField, sortDirection]);
+
   const paginatedItems = useMemo(() => {
     const start = (page - 1) * itemsPerPage;
-    return filteredItems.slice(start, start + itemsPerPage);
-  }, [filteredItems, page, itemsPerPage]);
+    return sortedItems.slice(start, start + itemsPerPage);
+  }, [sortedItems, page, itemsPerPage]);
+
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortField(field);
+    setSortDirection("asc");
+  };
+
+  const sortIndicator = (field) => sortField === field ? (sortDirection === "asc" ? " ↑" : " ↓") : "";
 
   useEffect(() => {
     setPage(1);
@@ -247,25 +321,17 @@ export default function Inscripciones() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const eventoFilterOptions = useMemo(() => {
-    const seen = new Map();
-    inscripciones.forEach((item) => {
-      const id = String(item.evento?.id || item.evento_id || "");
-      if (!id || seen.has(id)) return;
-      seen.set(id, item.evento?.nombre || `Evento ${id}`);
-    });
-    return Array.from(seen.entries()).map(([id, nombre]) => ({ id, nombre }));
-  }, [inscripciones]);
-
   const categoriaFilterOptions = useMemo(() => {
     const seen = new Map();
-    inscripciones.forEach((item) => {
-      const id = String(item.categoria?.id || item.categoria_id || "");
-      if (!id || seen.has(id)) return;
-      seen.set(id, item.categoria?.nombre || `Categoría ${id}`);
-    });
+    inscripciones
+      .filter((item) => !filterEvento || String(item.evento?.id || item.evento_id || "") === filterEvento)
+      .forEach((item) => {
+        const id = String(item.categoria?.id || item.categoria_id || "");
+        if (!id || seen.has(id)) return;
+        seen.set(id, item.categoria?.nombre || `Categoría ${id}`);
+      });
     return Array.from(seen.entries()).map(([id, nombre]) => ({ id, nombre }));
-  }, [inscripciones]);
+  }, [inscripciones, filterEvento]);
 
   const dorsalFilterOptions = useMemo(() => {
     const seen = new Set();
@@ -324,13 +390,32 @@ export default function Inscripciones() {
         throw new Error("Completa evento, categoría, piloto, moto y dorsal.");
       }
 
-      await createInscripcion({
+      const created = await createInscripcion({
         evento_id: draft.evento_id,
         piloto_id: draft.piloto_id,
         categoria_id: draft.categoria_id,
         motocicleta_id: draft.motocicleta_id,
         dorsal_asignado: Number(draft.dorsal_asignado),
         estado: draft.estado,
+      });
+
+      const evento = optionsByEvent.find((item) => String(item.id) === String(draft.evento_id));
+      const categoria = optionsByCategory.find((item) => String(item.id) === String(draft.categoria_id));
+      const piloto = optionsByPilot.find((item) => String(item.id) === String(draft.piloto_id));
+      const moto = optionsByMoto.find((item) => String(item.id) === String(draft.motocicleta_id));
+
+      setPdfPreview({
+        id: created?.id || "—",
+        fecha: created?.fecha_registro ? new Date(created.fecha_registro).toLocaleDateString("es-GT") : new Date().toLocaleDateString("es-GT"),
+        evento: evento ? `${evento.nombre || ""}${evento.campeonato_nombre ? ` — ${evento.campeonato_nombre}` : ""}` : "—",
+        categoria: categoria ? `${categoria.nombre || ""}${categoria.cilindrada_min || categoria.cilindrada_max ? ` (${categoria.cilindrada_min}-${categoria.cilindrada_max} cc)` : ""}` : "—",
+        piloto: piloto ? `${piloto.nombre || ""} ${piloto.apellido || ""}`.trim() : "—",
+        email: piloto?.email || "—",
+        moto: moto ? `${moto.marca_nombre ? `${moto.marca_nombre} ` : ""}${moto.modelo || ""}${moto.apodo_moto ? ` (${moto.apodo_moto})` : ""}` : "—",
+        anio: moto?.anio || "—",
+        cilindrada: moto?.cilindrada_real || moto?.cilindrada || "—",
+        dorsal: draft.dorsal_asignado || "—",
+        estado: (draft.estado || "PENDIENTE").toUpperCase(),
       });
 
       setMessage("✅ Inscripción guardada correctamente.");
@@ -345,6 +430,71 @@ export default function Inscripciones() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const abrirVistaPreviaPDF = (preview) => {
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fila = (label, value) => `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`;
+    const filaHtml = (label, valueHtml) => `<tr><th>${esc(label)}</th><td>${valueHtml}</td></tr>`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Inscripción ${esc(preview.id)}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: Arial, sans-serif; font-size: 12px; color: #0f172a; background: #fff; padding: 28px; }
+          .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+          h1 { font-size: 20px; letter-spacing: 1px; }
+          .comprobante { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 2px; }
+          .meta { text-align: right; font-size: 11px; color: #475569; }
+          .meta strong { color: #0f172a; }
+          hr { border: none; border-top: 2px solid #0f172a; margin-bottom: 18px; }
+          h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #2563eb; margin: 18px 0 8px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { padding: 8px 10px; border: 1px solid #cbd5e1; text-align: left; }
+          th { background: #f1f5f9; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #475569; width: 38%; }
+          td { font-weight: 600; }
+          .dorsal { font-size: 26px; font-weight: 800; color: #0ea5a4; }
+          .boton { display: inline-block; margin-top: 18px; padding: 10px 18px; background: #0f172a; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 12px; }
+          .hint { margin-top: 8px; font-size: 11px; color: #94a3b8; }
+          @media print { .boton, .hint { display: none; } @page { size: letter; margin: 12mm; } body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="top">
+          <div>
+            <div class="comprobante">Comprobante de inscripción</div>
+            <h1>MWT</h1>
+          </div>
+          <div class="meta">
+            <div>N.º <strong>${esc(preview.id)}</strong></div>
+            <div>Fecha: <strong>${esc(preview.fecha)}</strong></div>
+          </div>
+        </div>
+        <hr />
+        <h2>Evento</h2>
+        <table>${fila("Evento", preview.evento)}${fila("Categoría", preview.categoria)}</table>
+        <h2>Piloto</h2>
+        <table>${fila("Nombre", preview.piloto)}${fila("Correo", preview.email)}</table>
+        <h2>Motocicleta</h2>
+        <table>${fila("Motocicleta", preview.moto)}${fila("Año", preview.anio)}${fila("Cilindrada", `${preview.cilindrada} cc`)}</table>
+        <h2>Inscripción</h2>
+        <table>${filaHtml("Dorsal asignado", `<span class="dorsal">${esc(preview.dorsal)}</span>`)}${fila("Estado", preview.estado)}</table>
+        <button class="boton" onclick="window.print()">Imprimir / Guardar como PDF</button>
+        <div class="hint">Sugerencia: usa «Guardar como PDF» en el diálogo de impresión para generar el archivo.</div>
+      </body>
+      </html>
+    `;
+
+    const ventana = window.open("", "printInscripcion");
+    if (!ventana) return;
+    ventana.document.open();
+    ventana.document.write(html);
+    ventana.document.close();
+    ventana.focus();
   };
 
   const openMotoModal = () => {
@@ -364,7 +514,7 @@ export default function Inscripciones() {
     } catch {
       // ignore
     }
-    window.location.href = "/dashboard/mantenimiento/pilotos?desde=inscripciones";
+    window.location.href = "/dashboard/pilotos?desde=inscripciones";
   };
 
   const handleCreateMoto = async (event) => {
@@ -444,6 +594,7 @@ export default function Inscripciones() {
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button type="button" onClick={() => setActiveTab("inscribir")} style={{ padding: "8px 12px", borderRadius: 8, border: activeTab === "inscribir" ? "2px solid #0ea5a4" : "1px solid rgba(148,163,184,0.2)", background: activeTab === "inscribir" ? "#0ea5a4" : "#fff", color: activeTab === "inscribir" ? "#fff" : "#0f172a", cursor: "pointer" }}>Inscribir pilotos</button>
           <button type="button" onClick={() => setActiveTab("estadisticas")} style={{ padding: "8px 12px", borderRadius: 8, border: activeTab === "estadisticas" ? "2px solid #0ea5a4" : "1px solid rgba(148,163,184,0.2)", background: activeTab === "estadisticas" ? "#0ea5a4" : "#fff", color: activeTab === "estadisticas" ? "#fff" : "#0f172a", cursor: "pointer" }}>Estadísticas</button>
+          <button type="button" onClick={() => setActiveTab("reportes")} style={{ padding: "8px 12px", borderRadius: 8, border: activeTab === "reportes" ? "2px solid #0ea5a4" : "1px solid rgba(148,163,184,0.2)", background: activeTab === "reportes" ? "#0ea5a4" : "#fff", color: activeTab === "reportes" ? "#fff" : "#0f172a", cursor: "pointer" }}>Reportes</button>
         </div>
 
         {activeTab === "inscribir" ? (
@@ -455,9 +606,9 @@ export default function Inscripciones() {
               {optionsLoading ? <p className={styles.fieldHint}>Cargando catálogos relacionados...</p> : null}
 
               <form className={styles.formGrid} onSubmit={handleCreate}>
-                <label className={styles.field}><span className={styles.fieldLabel}>Evento</span><select className={styles.input} value={draft.evento_id} onChange={(e) => setField("evento_id", e.target.value)} required><option value="">Seleccione un evento</option>{optionsByEvent.map((evento) => <option key={evento.id} value={evento.id}>{evento.nombre} {evento.campeonato_nombre ? `- ${evento.campeonato_nombre}` : ""}</option>)}</select></label>
-                <label className={styles.field}><span className={styles.fieldLabel}>Categoría</span><select className={styles.input} value={draft.categoria_id} onChange={(e) => setField("categoria_id", e.target.value)} required disabled={!draft.evento_id}><option value="">{draft.evento_id ? (optionsByCategory.length ? "Seleccione una categoría" : "No hay categorías para este evento") : "Primero seleccione un evento"}</option>{optionsByCategory.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre} {categoria.cilindrada_min || categoria.cilindrada_max ? `(${categoria.cilindrada_min}-${categoria.cilindrada_max} cc)` : ""}</option>)}</select></label>
-                <label className={styles.field}><span className={styles.fieldLabel}>Piloto</span><select className={styles.input} value={draft.piloto_id} onChange={(e) => setField("piloto_id", e.target.value)} required><option value="">Seleccione un piloto existente</option>{optionsByPilot.map((piloto) => <option key={piloto.id} value={piloto.id}>{piloto.nombre} {piloto.apellido} {piloto.email ? `- ${piloto.email}` : ""}</option>)}</select><div style={{ marginTop: 8 }}><button type="button" onClick={goToCrearPiloto} style={{ background: "#0ea5a4", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontWeight: 700, minHeight: 40 }}>+ Agregar piloto nuevo</button></div></label>
+                <label className={styles.field}><span className={styles.fieldLabel}>Evento</span><SearchSelect groups={eventGroups} value={draft.evento_id || ""} onChange={(v) => setField("evento_id", v)} placeholder="Seleccione un evento" searchPlaceholder="Buscar por fecha o campeonato..." className="w-full" inputClassName={styles.input} /></label>
+                <label className={styles.field}><span className={styles.fieldLabel}>Categoría</span><select className={styles.input} value={draft.categoria_id} onChange={(e) => setField("categoria_id", e.target.value)} required disabled={!draft.evento_id}><option value="">{draft.evento_id ? (categoriasDisponibles.length ? "Seleccione una categoría" : "No hay categorías para este evento") : "Primero seleccione un evento"}</option>{categoriasDisponibles.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre} {categoria.cilindrada_min || categoria.cilindrada_max ? `(${categoria.cilindrada_min}-${categoria.cilindrada_max} cc)` : ""}</option>)}</select></label>
+                <label className={styles.field}><span className={styles.fieldLabel}>Piloto</span><SearchSelect options={optionsByPilot.map((piloto) => ({ value: String(piloto.id), label: `${[piloto.nombre, piloto.apellido].filter(Boolean).join(" ")}${piloto.email ? ` - ${piloto.email}` : ""}`.trim() }))} value={draft.piloto_id || ""} onChange={(v) => setField("piloto_id", v)} placeholder="Seleccione un piloto existente" searchPlaceholder="Buscar por nombre..." className="w-full" /><div style={{ marginTop: 8 }}><button type="button" onClick={goToCrearPiloto} style={{ background: "#0ea5a4", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontWeight: 700, minHeight: 40 }}>+ Agregar piloto nuevo</button></div></label>
                 <label className={styles.field}>
                   <span className={styles.fieldLabel}>Motocicleta</span>
                   <select className={styles.input} value={draft.motocicleta_id} onChange={(e) => setField("motocicleta_id", e.target.value)} required disabled={!draft.piloto_id}>
@@ -473,20 +624,19 @@ export default function Inscripciones() {
 
                 <label className={styles.field}>
                   <span className={styles.fieldLabel}>Dorsal asignado</span>
-                  <select
-                    className={styles.input}
+                  <SearchSelect
+                    options={dorsalStatusOptions.map((item) => ({
+                      value: String(item.numero),
+                      label: `#${item.numero}${item.ocupado ? " - ocupado" : " - disponible"}`,
+                      disabled: item.ocupado,
+                    }))}
                     value={draft.dorsal_asignado || ""}
-                    onChange={(e) => setField("dorsal_asignado", e.target.value)}
+                    onChange={(v) => setField("dorsal_asignado", v)}
+                    placeholder={draft.evento_id && draft.categoria_id ? "Seleccione un dorsal" : "Seleccione evento y categoría"}
+                    searchPlaceholder="Buscar dorsal..."
+                    className="w-full"
                     disabled={!draft.evento_id || !draft.categoria_id}
-                    required
-                  >
-                    <option value="">{draft.evento_id && draft.categoria_id ? "Seleccione un dorsal" : "Seleccione evento y categoría"}</option>
-                    {dorsalStatusOptions.map((item) => (
-                      <option key={item.numero} value={item.numero} disabled={item.ocupado}>
-                        {item.numero}{item.ocupado ? " - ocupado" : " - disponible"}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <span className={styles.fieldHint}>
                     {draft.evento_id && draft.categoria_id
                       ? `${dorsalStatusOptions.filter((d) => d.ocupado).length} ocupados, ${dorsalStatusOptions.filter((d) => !d.ocupado).length} disponibles.`
@@ -504,7 +654,7 @@ export default function Inscripciones() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 16 }}>
                 <input className={styles.input} type="search" placeholder="Buscar por ID, piloto, email, evento o dorsal..." value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: "100%" }} />
                 <select className={styles.input} value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}><option value="">Todos los estados</option><option value="PENDIENTE">Pendiente</option><option value="PAGADA">Pagada</option><option value="VALIDADA">Validada</option><option value="RECHAZADA">Rechazada</option></select>
-                <select className={styles.input} value={filterEvento} onChange={(e) => setFilterEvento(e.target.value)}><option value="">Todos los eventos</option>{eventoFilterOptions.map((evento) => <option key={evento.id} value={evento.id}>{evento.nombre}</option>)}</select>
+                <SearchSelect clearable groups={eventGroups} value={filterEvento || ""} onChange={(v) => { setFilterEvento(v); if (v !== filterEvento) setFilterCategoria(""); }} placeholder="Todos los eventos" searchPlaceholder="Buscar evento o campeonato..." className="w-full" inputClassName={styles.input} />
                 <select className={styles.input} value={filterCategoria} onChange={(e) => setFilterCategoria(e.target.value)}><option value="">Todas las categorías</option>{categoriaFilterOptions.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre}</option>)}</select>
                 <select className={styles.input} value={filterDorsal} onChange={(e) => setFilterDorsal(e.target.value)}><option value="">Todos los dorsales</option>{dorsalFilterOptions.map((dorsal) => <option key={dorsal} value={dorsal}>{dorsal}</option>)}</select>
                 <button type="button" className={styles.secondaryBtn} onClick={clearListFilters} style={{ minHeight: 44 }}>Limpiar filtros</button>
@@ -528,7 +678,15 @@ export default function Inscripciones() {
               <div className={styles.tableWrapper}>
                 {filteredItems.length === 0 ? <div className={styles.emptyState}>{inscripciones.length === 0 ? "No hay inscripciones registradas." : `No hay inscripciones que coincidan con "${query}".`}</div> : (
                   <table className={styles.table}>
-                    <thead><tr><th>ID</th><th>Piloto</th><th>Evento</th><th>Categoría</th><th>Dorsal</th><th>Estado</th><th>Fecha</th></tr></thead>
+                    <thead><tr>
+                      <th>ID</th>
+                      <th><button type="button" className={styles.sortButton} onClick={() => toggleSort("piloto")}>Piloto{sortIndicator("piloto")}</button></th>
+                      <th><button type="button" className={styles.sortButton} onClick={() => toggleSort("evento")}>Evento{sortIndicator("evento")}</button></th>
+                      <th><button type="button" className={styles.sortButton} onClick={() => toggleSort("categoria")}>Categoría{sortIndicator("categoria")}</button></th>
+                      <th><button type="button" className={styles.sortButton} onClick={() => toggleSort("dorsal")}>Dorsal{sortIndicator("dorsal")}</button></th>
+                      <th><button type="button" className={styles.sortButton} onClick={() => toggleSort("estado")}>Estado{sortIndicator("estado")}</button></th>
+                      <th><button type="button" className={styles.sortButton} onClick={() => toggleSort("fecha_registro")}>Fecha{sortIndicator("fecha_registro")}</button></th>
+                    </tr></thead>
                     <tbody>{paginatedItems.map((item) => (
                       <tr key={item.id}>
                         <td className={styles.monospace}>{item.id.slice(0, 8)}</td>
@@ -544,7 +702,7 @@ export default function Inscripciones() {
                               {loadingPilotoInfo ? "Cargando..." : "Info"}
                             </button>
                             <button type="button" onClick={async () => {
-                              if (!confirm("Eliminar inscripción? Esto borrará solo este registro y no afectará al piloto.")) return;
+                              if (!(await confirm({ title: "Eliminar inscripción", message: "¿Eliminar esta inscripción? Esto borrará solo este registro y no afectará al piloto.", confirmText: "Eliminar" }))) return;
                               try {
                                 setDeletingIds((s) => new Set(s).add(item.id));
                                 await deleteInscripcion(item.id);
@@ -570,8 +728,10 @@ export default function Inscripciones() {
               </div>
             </section>
           </>
+        ) : activeTab === "estadisticas" ? (
+          <InscripcionesAnalytics inscripciones={inscripciones} eventGroups={eventGroups} />
         ) : (
-          <InscripcionesAnalytics inscripciones={inscripciones} />
+          <InscripcionesReportes inscripciones={inscripciones} eventGroups={eventGroups} />
         )}
       </section>
 
@@ -647,6 +807,47 @@ export default function Inscripciones() {
                 </section>
               </>
             ) : <p className={styles.fieldHint}>No hay información del piloto para mostrar.</p>}
+          </div>
+        </div>
+      ) : null}
+
+      {pdfPreview ? (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(2,6,23,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 96, padding: 16 }}>
+          <div style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 20px 60px rgba(15,23,42,0.28)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 14 }}>
+              <h2 style={{ margin: 0 }}>Inscripción registrada</h2>
+              <button type="button" className={styles.secondaryBtn} onClick={() => setPdfPreview(null)}>Cerrar</button>
+            </div>
+
+            <p className={styles.fieldHint} style={{ marginTop: 0, marginBottom: 14 }}>
+              Revisa la información general y genera el comprobante PDF cuando quieras.
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+              {[
+                ["Inscripción N.º", pdfPreview.id],
+                ["Fecha", pdfPreview.fecha],
+                ["Estado", pdfPreview.estado],
+                ["Dorsal", pdfPreview.dorsal],
+                ["Evento", pdfPreview.evento],
+                ["Categoría", pdfPreview.categoria],
+                ["Piloto", pdfPreview.piloto],
+                ["Email", pdfPreview.email],
+                ["Motocicleta", pdfPreview.moto],
+                ["Año", pdfPreview.anio],
+                ["Cilindrada", `${pdfPreview.cilindrada} cc`],
+              ].map(([k, v]) => (
+                <label key={k} className={styles.field}>
+                  <span className={styles.fieldLabel}>{k}</span>
+                  <input className={styles.input} value={v === "—" ? "" : v} readOnly disabled style={{ color: "#0f172a", opacity: 1 }} />
+                </label>
+              ))}
+            </div>
+
+            <div className={styles.formActions} style={{ gridColumn: "1 / -1" }}>
+              <button type="button" className={styles.secondaryBtn} onClick={() => setPdfPreview(null)}>Cerrar</button>
+              <button type="button" className={styles.primaryBtn} onClick={() => abrirVistaPreviaPDF(pdfPreview)}>Vista previa PDF</button>
+            </div>
           </div>
         </div>
       ) : null}
