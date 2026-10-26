@@ -44,7 +44,13 @@ function fmtFecha(v) {
 
 function fmtHora(v) {
   if (!v) return "—";
-  return String(v).slice(0, 5);
+  const s = String(v);
+  // Acepta ISO completo ("2026-02-28T08:00:00Z") o solo la hora ("08:00").
+  const iso = s.match(/T(\d{2}):(\d{2})/);
+  if (iso) return `${iso[1]}:${iso[2]}`;
+  const hm = s.match(/^(\d{1,2}):(\d{2})/);
+  if (hm) return `${hm[1].padStart(2, "0")}:${hm[2]}`;
+  return s.slice(0, 5);
 }
 
 export default function EventosPage() {
@@ -58,6 +64,7 @@ export default function EventosPage() {
   const [mode, setMode] = useState("carpetas");
   const [abierto, setAbierto] = useState([]);
   const [calendar, setCalendar] = useState({ y: new Date().getFullYear(), m: new Date().getMonth() });
+  const [busqueda, setBusqueda] = useState("");
 
   // Modal de serie (carpeta de evento ACMG/Yamaha)
   const [modal, setModal] = useState(null); // { tipo: "crear"|"editar", serie }
@@ -262,7 +269,7 @@ export default function EventosPage() {
     const ord = ["Primera", "Segunda", "Tercera", "Cuarta", "Quinta", "Sexta", "Séptima", "Octava", "Novena", "Décima"];
     const sugerido = n < ord.length ? `${ord[n]} fecha` : `${n + 1}ª fecha`;
     setModalFecha({ tipo: "crear", evento: null, serie_id: serie.id });
-    setDraftFecha({ nombre: sugerido, campeonato_id: serie.id, estado: "BORRADOR", visible_portada: true });
+    setDraftFecha({ nombre: sugerido, campeonato_id: serie.id, estado: "BORRADOR", visible_portada: false });
   };
 
   const abrirEditarFecha = (ev) => {
@@ -292,10 +299,11 @@ export default function EventosPage() {
         circuito_id: draftFecha.circuito_id || undefined,
         costo_base: draftFecha.costo_base ? Number(draftFecha.costo_base) : undefined,
         id: modalFecha?.tipo === "editar" ? modalFecha.evento.id : undefined,
+        estado: draftFecha.visible_portada ? "ABIERTO" : "BORRADOR",
+        visible_portada: Boolean(draftFecha.visible_portada),
+        usuario_id: getCurrentUser()?.id || undefined,
       };
-      if (modalFecha?.tipo === "editar") {
-        await saveDraftEvento(payload);
-      } else if (draftFecha.estado === "ABIERTO") {
+      if (draftFecha.visible_portada) {
         await publishEvento(payload);
       } else {
         await saveDraftEvento(payload);
@@ -358,7 +366,7 @@ export default function EventosPage() {
     }
   };
 
-  const addActividad = async (e) => {
+  const guardarActividad = async (e) => {
     e.preventDefault();
     if (!cronogramaDe) return;
     const fd = new FormData(e.target);
@@ -369,17 +377,26 @@ export default function EventosPage() {
       descripcion: fd.get("act_descripcion") || undefined,
       es_pista: fd.get("act_es_pista") === "on",
     };
+    const editando = cronogramaModal?.tipo === "editar" && cronogramaModal?.actividad;
     try {
-      const res = await fetch(`${API_URL}/api/eventos/${cronogramaDe.id}/cronograma`, {
-        method: "POST",
+      const url = editando
+        ? `${API_URL}/api/eventos/${cronogramaDe.id}/cronograma/${cronogramaModal.actividad.id}`
+        : `${API_URL}/api/eventos/${cronogramaDe.id}/cronograma`;
+      const res = await fetch(url, {
+        method: editando ? "PATCH" : "POST",
         headers: authHeaders(),
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "Error");
+      setCronogramaModal(null);
       abrirCronograma(cronogramaDe);
     } catch (err) {
-      setError(err?.message || "No se pudo agregar la actividad.");
+      setError(err?.message || (editando ? "No se pudo actualizar la actividad." : "No se pudo agregar la actividad."));
     }
+  };
+
+  const abrirEditarActividad = (act) => {
+    setCronogramaModal({ tipo: "editar", actividad: act });
   };
 
   const deleteActividad = async (id) => {
@@ -465,6 +482,8 @@ export default function EventosPage() {
 
   const deleteCategoria = async (id) => {
     if (!categoriasDe) return;
+    const categoria = categoriasData.items.find((item) => item.id === id);
+    if (categoria && categoria.administrable === false) return;
     if (!(await confirm({ title: "Eliminar categoría", message: "¿Eliminar esta categoría? No se puede eliminar si tiene inscripciones.", confirmText: "Eliminar" }))) return;
     try {
       const res = await fetch(`${API_URL}/api/admin/series/${categoriasDe.id}/categorias/${id}`, {
@@ -492,6 +511,28 @@ export default function EventosPage() {
     );
   });
 
+  const arbolFiltrado = arbol
+    .map((año) => ({
+      ...año,
+      series: año.series
+        .filter((serie) => {
+          const q = busqueda.trim().toLowerCase();
+          if (!q) return true;
+          return serie.nombre.toLowerCase().includes(q) || serie.modalidad.toLowerCase().includes(q) || String(año.anio).includes(q);
+        })
+        .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    }))
+    .filter((año) => año.series.length > 0 || !busqueda.trim());
+
+  const abrirTodo = () => {
+    setAbierto([
+      ...arbolFiltrado.map((año) => `a:${año.anio}`),
+      ...arbolFiltrado.flatMap((año) => año.series.map((serie) => `s:${serie.id}`)),
+    ]);
+  };
+
+  const cerrarTodo = () => setAbierto([]);
+
   // ---------------- Render helpers ----------------
 
   const cronogramaItems = cronograma.map((act) => (
@@ -509,7 +550,10 @@ export default function EventosPage() {
           {act.es_pista && <Badge variant="cyan">Pista</Badge>}
         </div>
       </div>
-      <button onClick={() => deleteActividad(act.id)} className="text-rose-500 hover:text-rose-700 p-1 shrink-0" title="Eliminar"><X size={14} /></button>
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={() => abrirEditarActividad(act)} className="text-slate-500 hover:text-blue-600 p-1" title="Editar"><Pencil size={14} /></button>
+        <button onClick={() => deleteActividad(act.id)} className="text-rose-500 hover:text-rose-700 p-1" title="Eliminar"><X size={14} /></button>
+      </div>
     </div>
   ));
 
@@ -612,7 +656,7 @@ export default function EventosPage() {
     }
     return (
       <div className="space-y-3">
-        {arbol.map((año) => {
+        {arbolFiltrado.map((año) => {
           const open = abierto.includes(`a:${año.anio}`);
           const totalSeries = año.series.length;
           const totalFechas = año.series.reduce((acc, s) => acc + (s.count_fechas || 0), 0);
@@ -674,6 +718,19 @@ export default function EventosPage() {
           </Btn>
         </div>
       </div>
+
+      {mode === "carpetas" ? (
+        <div className="flex items-center gap-2 flex-wrap rounded-[14px] border border-border bg-card p-3">
+          <input
+            className={`${inputCls} min-w-[220px] flex-1`}
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar carpeta, modalidad o año..."
+          />
+          <Btn variant="secondary" sm onClick={abrirTodo}>Expandir todo</Btn>
+          <Btn variant="secondary" sm onClick={cerrarTodo}>Cerrar todo</Btn>
+        </div>
+      ) : null}
 
       {loading ? (
         <Empty title="Cargando eventos..." />
@@ -873,15 +930,15 @@ export default function EventosPage() {
         {cronogramaModal && (
           <div className="mt-6 pt-6 border-t border-border">
             <h4 className="font-bold mb-3">{cronogramaModal.tipo === "editar" ? "Editar actividad" : "Nueva actividad"}</h4>
-            <form onSubmit={(e) => { e.preventDefault(); addActividad(e); }} className="space-y-3">
-              <Field label="Nombre"><input className={inputCls} name="act_nombre" required placeholder="Ej. Practicas libres" /></Field>
+            <form onSubmit={(e) => { e.preventDefault(); guardarActividad(e); }} className="space-y-3">
+              <Field label="Nombre"><input className={inputCls} name="act_nombre" required placeholder="Ej. Practicas libres" defaultValue={cronogramaModal?.actividad?.nombre || ""} /></Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Hora inicio"><input type="time" className={inputCls} name="act_hora_inicio" required /></Field>
-                <Field label="Hora fin"><input type="time" className={inputCls} name="act_hora_fin" required /></Field>
+                <Field label="Hora inicio"><input type="time" className={inputCls} name="act_hora_inicio" required defaultValue={cronogramaModal?.actividad ? fmtHora(cronogramaModal.actividad.hora_inicio) : ""} /></Field>
+                <Field label="Hora fin"><input type="time" className={inputCls} name="act_hora_fin" required defaultValue={cronogramaModal?.actividad ? fmtHora(cronogramaModal.actividad.hora_fin) : ""} /></Field>
               </div>
-              <Field label="Descripcion (opcional)"><textarea className={inputCls} name="act_descripcion" rows={2} placeholder="Detalles..." /></Field>
+              <Field label="Descripcion (opcional)"><textarea className={inputCls} name="act_descripcion" rows={2} placeholder="Detalles..." defaultValue={cronogramaModal?.actividad?.descripcion || ""} /></Field>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" name="act_es_pista" className="w-4 h-4 rounded border-border accent-blue-600" />
+                <input type="checkbox" name="act_es_pista" className="w-4 h-4 rounded border-border accent-blue-600" defaultChecked={Boolean(cronogramaModal?.actividad?.es_pista)} />
                 <span className="text-sm">Es actividad en pista</span>
               </label>
               <div className="flex justify-end gap-2">
@@ -914,6 +971,22 @@ export default function EventosPage() {
         ) : (
           <div className="space-y-5">
             <div>
+              <h4 className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 mb-2">Agregar categoría nueva</h4>
+              <form onSubmit={addCategoria} className="space-y-3">
+                <Field label="Nombre"><input className={inputCls} name="cat_nombre" required placeholder="Ej. 125cc Stock" /></Field>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Cilindrada min"><input type="number" className={inputCls} name="cat_cil_min" required placeholder="100" min="50" /></Field>
+                  <Field label="Cilindrada max"><input type="number" className={inputCls} name="cat_cil_max" required placeholder="125" min="50" /></Field>
+                  <Field label="Precio (Q)"><input type="number" className={inputCls} name="cat_precio" required placeholder="950" min="0" step="1" /></Field>
+                </div>
+                <Field label="Descripción (opcional)"><textarea className={inputCls} name="cat_descripcion" rows={2} placeholder="Detalles..." /></Field>
+                <div className="flex justify-end">
+                  <Btn variant="gradient" type="submit"><Plus size={12} /> Agregar categoría</Btn>
+                </div>
+              </form>
+            </div>
+
+            <div className="pt-4 border-t border-border">
               <h4 className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 mb-2">
                 Categorías que participan ({categoriasData.items.length})
               </h4>
@@ -929,9 +1002,10 @@ export default function EventosPage() {
                           <span>{cat.cilindrada_min}-{cat.cilindrada_max} cc</span>
                           <span className="text-blue-600 font-black">Q{Number(cat.precio_inscripcion || 0).toLocaleString("es-GT")}</span>
                           <span>Inscritos: {cat.total_inscritos || 0}</span>
+                          {cat.administrable === false ? <span className="text-amber-600">Categoría histórica</span> : null}
                         </div>
                       </div>
-                      <button onClick={() => deleteCategoria(cat.id)} className="text-rose-500 hover:text-rose-700 p-1 shrink-0" title="Eliminar"><X size={14} /></button>
+                      <button onClick={() => deleteCategoria(cat.id)} disabled={cat.administrable === false} className="text-rose-500 hover:text-rose-700 p-1 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed" title={cat.administrable === false ? "Categoría conservada por inscripciones históricas" : "Eliminar"}><X size={14} /></button>
                     </div>
                   ))}
                 </div>
@@ -971,22 +1045,6 @@ export default function EventosPage() {
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="pt-4 border-t border-border">
-              <h4 className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 mb-2">Agregar categoría nueva</h4>
-              <form onSubmit={addCategoria} className="space-y-3">
-                <Field label="Nombre"><input className={inputCls} name="cat_nombre" required placeholder="Ej. 125cc Stock" /></Field>
-                <div className="grid grid-cols-3 gap-3">
-                  <Field label="Cilindrada min"><input type="number" className={inputCls} name="cat_cil_min" required placeholder="100" min="50" /></Field>
-                  <Field label="Cilindrada max"><input type="number" className={inputCls} name="cat_cil_max" required placeholder="125" min="50" /></Field>
-                  <Field label="Precio (Q)"><input type="number" className={inputCls} name="cat_precio" required placeholder="950" min="0" step="1" /></Field>
-                </div>
-                <Field label="Descripción (opcional)"><textarea className={inputCls} name="cat_descripcion" rows={2} placeholder="Detalles..." /></Field>
-                <div className="flex justify-end">
-                  <Btn variant="gradient" type="submit"><Plus size={12} /> Agregar categoría</Btn>
-                </div>
-              </form>
             </div>
           </div>
         )}

@@ -42,6 +42,16 @@ function sancionToView(s: any) {
           fecha: s.apelacion.fecha,
         }
       : null,
+    // Evidencias adjuntas (imágenes/videos): SOLO respaldo documental,
+    // la IA del comisariato no las analiza.
+    evidencias: (s.evidencias || []).map((e: any) => ({
+      id: e.id,
+      tipo: e.tipo,
+      nombre: e.nombre,
+      ruta_archivo: e.ruta_archivo,
+      mime: e.mime,
+      tamano: e.tamano,
+    })),
   };
 }
 
@@ -52,6 +62,7 @@ export async function listSanciones() {
       tipo_sancion: true,
       comisario: { select: { nombre: true, apellido: true } },
       apelacion: true,
+      evidencias: true,
       inscripcion: {
         include: {
           evento: true,
@@ -71,6 +82,7 @@ export async function createSancion(input: {
   motivo: string;
   estado?: string;
   penalizacion?: string;
+  evidencias?: string[];
 }) {
   const inscripcion = await prisma.inscripcion.findUnique({
     where: { id: input.inscripcion_id },
@@ -78,7 +90,7 @@ export async function createSancion(input: {
   });
   if (!inscripcion) throw new Error('La inscripción especificada no existe.');
 
-  return prisma.sancion.create({
+  const sancion = await prisma.sancion.create({
     data: {
       inscripcion_id: input.inscripcion_id,
       comisario_id: input.comisario_id || '',
@@ -89,6 +101,18 @@ export async function createSancion(input: {
     },
     include: { tipo_sancion: true },
   });
+
+  // Vincular las evidencias subidas durante el registro de la infracción
+  // (solo si aún no están vinculadas a otra sanción).
+  const idsEvidencias = Array.isArray(input.evidencias) ? input.evidencias.filter(Boolean) : [];
+  if (idsEvidencias.length) {
+    await prisma.evidencia.updateMany({
+      where: { id: { in: idsEvidencias }, sancion_id: null },
+      data: { sancion_id: sancion.id },
+    });
+  }
+
+  return sancion;
 }
 
 export async function updateSancion(id: string, input: {
@@ -139,7 +163,7 @@ export async function listTiposSancion() {
 
 export async function createTipoSancion(input: { nombre: string; descripcion?: string }) {
   const nombre = input.nombre.trim();
-  const existing = await prisma.tipoSancion.findFirst({ where: { nombre: { equals: nombre, mode: 'insensitive' } } });
+  const existing = await prisma.tipoSancion.findFirst({ where: { nombre: { equals: nombre, mode: 'insensitive' }, evento_id: null } });
   if (existing) throw new Error('Ya existe un tipo de sanción con ese nombre.');
   return prisma.tipoSancion.create({ data: { nombre, descripcion: input.descripcion?.trim() || null } });
 }
@@ -518,4 +542,103 @@ export async function getReporteResumen() {
       { estado: 'RECHAZADA', count: inscripciones.filter((i) => i.estado === 'RECHAZADA').length },
     ],
   };
+}
+// ---------------------------------------------
+//  CAT�LOGO DEL REGLAMENTO (alimenta la IA del comisariato)
+//  Cada art�culo se registra con c�digo, t�tulo, texto y �rea.
+//  La IA sugiere el art�culo seg�n el tipo de infracci�n y la
+//  descripci�n detallada del hecho.
+// ---------------------------------------------
+
+export async function listReglamento() {
+  return prisma.reglamentoArticulo.findMany({ orderBy: { codigo: 'asc' } });
+}
+
+export async function createArticuloReglamento(input: {
+  codigo: string;
+  titulo: string;
+  texto: string;
+  area?: string;
+  creado_por?: string;
+}) {
+  const codigo = String(input.codigo || '').trim().toUpperCase();
+  if (!codigo) throw new Error('El c�digo del art�culo (ART. X.X) es requerido.');
+  if (!String(input.titulo || '').trim()) throw new Error('El t�tulo del art�culo es requerido.');
+  if (!String(input.texto || '').trim()) throw new Error('El texto del art�culo es requerido.');
+
+  const existente = await prisma.reglamentoArticulo.findFirst({ where: { codigo, evento_id: null } });
+  if (existente) throw new Error(`El art�culo ${codigo} ya est� registrado en el cat�logo.`);
+
+  return prisma.reglamentoArticulo.create({
+    data: {
+      codigo,
+      titulo: input.titulo.trim(),
+      texto: input.texto.trim(),
+      area: input.area?.trim() || null,
+      creado_por: input.creado_por || null,
+    },
+  });
+}
+
+export async function deleteArticuloReglamento(id: string) {
+  const articulo = await prisma.reglamentoArticulo.findUnique({ where: { id } });
+  if (!articulo) throw new Error('El art�culo no existe en el cat�logo.');
+  await prisma.reglamentoArticulo.delete({ where: { id } });
+  return { ok: true, id };
+}
+
+// ---------------------------------------------
+//  EVIDENCIAS (im�genes y videos de las incidencias)
+//  Solo se almacenan como respaldo documental; la IA del
+//  comisariato NO las analiza.
+// ---------------------------------------------
+
+export async function listEvidencias(opt: { inscripcion_id?: string; sancion_id?: string; soloSinSancion?: boolean } = {}) {
+  const where: any = {};
+  if (opt.inscripcion_id) where.inscripcion_id = opt.inscripcion_id;
+  if (opt.sancion_id) where.sancion_id = opt.sancion_id;
+  if (opt.soloSinSancion) where.sancion_id = null;
+  return prisma.evidencia.findMany({ where, orderBy: { createdAt: 'desc' } });
+}
+
+export async function createEvidencia(input: {
+  tipo: 'IMAGEN' | 'VIDEO';
+  nombre: string;
+  ruta_archivo: string;
+  mime: string;
+  tamano: number;
+  inscripcion_id?: string;
+  creado_por?: string;
+}) {
+  return prisma.evidencia.create({
+    data: {
+      tipo: input.tipo,
+      nombre: input.nombre,
+      ruta_archivo: input.ruta_archivo,
+      mime: input.mime,
+      tamano: input.tamano,
+      inscripcion_id: input.inscripcion_id || null,
+      creado_por: input.creado_por || null,
+    },
+  });
+}
+
+export async function deleteEvidencia(id: string) {
+  const evidencia = await prisma.evidencia.findUnique({ where: { id } });
+  if (!evidencia) throw new Error('La evidencia no existe.');
+
+  // Eliminar archivo f�sico si existe (ruta relativa: /uploads/evidencias/<archivo>)
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  if (evidencia.ruta_archivo) {
+    const rutaFisica = path.join(process.cwd(), evidencia.ruta_archivo.replace(/^\//, ''));
+    try {
+      if (fs.existsSync(rutaFisica)) fs.unlinkSync(rutaFisica);
+    } catch {
+      // El archivo ya no existe en disco; igual se elimina el registro.
+    }
+  }
+
+  await prisma.evidencia.delete({ where: { id } });
+  return { ok: true, id };
 }

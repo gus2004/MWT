@@ -156,20 +156,15 @@ export async function listarCategoriasDeSerie(serieId: string) {
   const serie = await prisma.campeonato.findUnique({ where: { id: serieId } });
   if (!serie) throw new Error('Serie no encontrada.');
 
-  const categorias = await prisma.categoria.findMany({
-    where: { campeonato_id: serieId },
-    orderBy: { nombre: 'asc' },
-  });
-
   const eventos = await prisma.evento.findMany({ where: { campeonato_id: serieId }, select: { id: true } });
   const eventoIds = eventos.map((ev) => ev.id);
 
-  // Conteo de inscritos por categoría sumando todas las fechas de la serie
+  // Include legacy categories already used by the series' registrations. Older
+  // events may point to a different campeonato, but their registrations remain valid.
   const registros = eventoIds.length
     ? await prisma.inscripcion.findMany({
         where: {
           evento_id: { in: eventoIds },
-          categoria_id: { in: categorias.map((c) => c.id) },
         },
         select: { categoria_id: true },
       })
@@ -179,6 +174,23 @@ export async function listarCategoriasDeSerie(serieId: string) {
     return acc;
   }, {});
 
+  const categorias = await prisma.categoria.findMany({
+    where: {
+      OR: [
+        { campeonato_id: serieId },
+        ...(Object.keys(conteo).length ? [{ id: { in: Object.keys(conteo) } }] : []),
+      ],
+    },
+    orderBy: { nombre: 'asc' },
+  });
+  const categoriasVisibles = Array.from(categorias.reduce((map, categoria) => {
+    const anterior = map.get(categoria.nombre.toLowerCase());
+    if (!anterior || (conteo[categoria.id] || 0) > (conteo[anterior.id] || 0)) {
+      map.set(categoria.nombre.toLowerCase(), categoria);
+    }
+    return map;
+  }, new Map<string, (typeof categorias)[number]>()).values());
+
   // Pool de categorías ya registradas en otros campeonatos (para importar)
   const pool = await prisma.categoria.findMany({
     where: { campeonato_id: { not: serieId } },
@@ -186,11 +198,11 @@ export async function listarCategoriasDeSerie(serieId: string) {
     orderBy: [{ campeonato: { anio: 'desc' } }, { nombre: 'asc' }],
   });
 
-  const idsActuales = new Set(categorias.map((c) => c.id));
+  const idsActuales = new Set(categoriasVisibles.map((c) => c.id));
 
   return {
     modalidad: normalizarModalidad(serie),
-    items: categorias.map((c) => ({
+    items: categoriasVisibles.map((c) => ({
       id: c.id,
       nombre: c.nombre,
       cilindrada_min: c.cilindrada_min,
@@ -198,6 +210,7 @@ export async function listarCategoriasDeSerie(serieId: string) {
       descripcion: c.descripcion,
       precio_inscripcion: c.precio_inscripcion,
       total_inscritos: conteo[c.id] || 0,
+      administrable: c.campeonato_id === serieId,
     })),
     pool: pool
       .filter((c) => !idsActuales.has(c.id))

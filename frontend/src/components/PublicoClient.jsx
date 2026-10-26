@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Trophy, Shield, ChevronLeft } from "lucide-react";
 import { Kpi, Card, Empty, Table, Tabs, Badge } from "@/components/kit";
 
@@ -46,9 +47,7 @@ export default function PublicoClient() {
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M12 3L22 21H2Z" opacity=".4" /><path d="M12 8L19 20H5Z" /></svg>
-            </div>
+            <Image src="/MWT - COLORS.png" alt="MWT Motorsport" width={128} height={38} className="w-24 sm:w-32 h-auto object-contain shrink-0" unoptimized />
             <div className="min-w-0">
               <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-900 leading-none truncate">MWT · Estadísticas</div>
               <div className="hidden sm:block text-[8px] font-black uppercase tracking-[0.22em] text-blue-600 mt-0.5">Consulta pública del campeonato</div>

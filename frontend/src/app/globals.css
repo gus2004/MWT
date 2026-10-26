@@ -98,6 +98,14 @@ html[data-theme="light"] {
   --page-bg: #edf4ff;
 }
 
+/* ── Identidad visual: par de logos según el tema ──
+   El logo "COLORS" (navy + amarillo) se muestra en temas claros y
+   el logo "BLANCO" en temas oscuros, para mantener legibilidad. */
+.logo-dark-theme { display: block; }
+.logo-light-theme { display: none; }
+html[data-theme="light"] .logo-dark-theme { display: none; }
+html[data-theme="light"] .logo-light-theme { display: block; }
+
 * {
   box-sizing: border-box;
 }

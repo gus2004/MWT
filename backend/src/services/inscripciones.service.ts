@@ -30,7 +30,11 @@ async function resolvePerfilPilotoByUsuarioIdOrPerfilId(pilotoId: string) {
 
 export async function getEventosDisponibles() {
   return prisma.evento.findMany({
-    where: { estado: 'ABIERTO' },
+    // Coordinación 100% con el módulo de Eventos: solo fechas mostradas en portada.
+    where: {
+      estado: 'ABIERTO',
+      visible_portada: true,
+    },
     select: {
       id: true,
       nombre: true,
@@ -57,11 +61,23 @@ export async function getCategoriasPorEvento(eventoId: string) {
     throw new Error('Evento no encontrado.');
   }
 
+  const categoriasDelEvento = await prisma.inscripcion.findMany({
+    where: { evento_id: eventoId },
+    select: { categoria_id: true },
+    distinct: ['categoria_id'],
+  });
+
   return prisma.categoria.findMany({
-    where: { campeonato_id: evento.campeonato_id },
+    where: {
+      OR: [
+        { campeonato_id: evento.campeonato_id },
+        ...(categoriasDelEvento.length ? [{ id: { in: categoriasDelEvento.map((item) => item.categoria_id) } }] : []),
+      ],
+    },
     select: {
       id: true,
       nombre: true,
+      campeonato_id: true,
       cilindrada_min: true,
       cilindrada_max: true,
       precio_inscripcion: true,
@@ -361,11 +377,17 @@ export async function crearInscripcion(input: CrearInscripcionInput) {
 
   const evento = await prisma.evento.findUnique({
     where: { id: input.evento_id },
-    select: { id: true, campeonato_id: true },
+    select: { id: true, campeonato_id: true, estado: true, visible_portada: true },
   });
 
   if (!evento) {
     throw new Error('Evento no encontrado.');
+  }
+
+  // Coordinación 100% con el módulo de Eventos: sin fecha mostrada/publicada
+  // en Eventos no se registran inscripciones.
+  if (!evento.visible_portada || String(evento.estado) !== 'ABIERTO') {
+    throw new Error('El evento no está mostrado en el módulo de Eventos: publica la fecha para habilitar inscripciones.');
   }
 
   if (evento.campeonato_id !== categoria.campeonato_id) {

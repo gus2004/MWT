@@ -18,7 +18,7 @@ function handleError(res: Response, error: any, fallback: string, status = 400) 
 
 export async function createEvento(req: Request, res: Response) {
   try {
-    const { nombre, campeonato_id, circuito_id, fecha_inicio, fecha_fin, usuario_id } = req.body;
+    const { nombre, campeonato_id, circuito_id, fecha_inicio, fecha_fin, costo_base, visible_portada, usuario_id } = req.body;
 
     if (!nombre || !campeonato_id || !circuito_id || !fecha_inicio || !usuario_id) {
       return res
@@ -32,12 +32,41 @@ export async function createEvento(req: Request, res: Response) {
       circuito_id,
       fecha_inicio,
       fecha_fin,
+      costo_base: costo_base !== undefined ? Number(costo_base) : undefined,
+      visible_portada: visible_portada !== undefined ? Boolean(visible_portada) : undefined,
       usuario_id,
     });
 
     return res.status(201).json(data);
   } catch (error: any) {
     return handleError(res, error, 'No fue posible crear el evento.');
+  }
+}
+
+export async function updateEvento(req: Request, res: Response) {
+  try {
+    const { evento_id } = req.params;
+    const { nombre, campeonato_id, circuito_id, fecha_inicio, fecha_fin, costo_base, visible_portada, usuario_id } = req.body;
+
+    if (!usuario_id) {
+      return res.status(400).json({ message: 'usuario_id es requerido para auditoría.' });
+    }
+
+    const data = await eventosService.actualizarEvento({
+      evento_id,
+      nombre,
+      campeonato_id,
+      circuito_id,
+      fecha_inicio,
+      fecha_fin,
+      costo_base: costo_base !== undefined ? Number(costo_base) : undefined,
+      visible_portada: visible_portada !== undefined ? Boolean(visible_portada) : undefined,
+      usuario_id,
+    });
+
+    return res.status(200).json(data);
+  } catch (error: any) {
+    return handleError(res, error, 'No fue posible actualizar el evento.');
   }
 }
 
@@ -113,5 +142,36 @@ export async function listCronograma(req: Request, res: Response) {
     return res.status(200).json({ items });
   } catch (error: any) {
     return handleError(res, error, 'No fue posible listar el cronograma.', 404);
+  }
+}
+
+export async function updateActividad(req: Request, res: Response) {
+  try {
+    const { evento_id, actividad_id } = req.params;
+    const { nombre, hora_inicio, hora_fin, descripcion, es_pista } = req.body;
+
+    const data = await eventosService.actualizarActividadCronograma({
+      evento_id,
+      actividad_id,
+      nombre,
+      hora_inicio,
+      hora_fin,
+      descripcion,
+      es_pista: es_pista !== undefined ? Boolean(es_pista) : undefined,
+    });
+
+    return res.status(200).json(data);
+  } catch (error: any) {
+    return handleError(res, error, 'No fue posible actualizar la actividad del cronograma.');
+  }
+}
+
+export async function deleteActividad(req: Request, res: Response) {
+  try {
+    const { evento_id, actividad_id } = req.params;
+    const data = await eventosService.eliminarActividadCronograma(evento_id, actividad_id);
+    return res.status(200).json(data);
+  } catch (error: any) {
+    return handleError(res, error, 'No fue posible eliminar la actividad del cronograma.', 404);
   }
 }

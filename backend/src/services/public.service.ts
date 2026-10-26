@@ -103,6 +103,10 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
   const [eventos, pilotos, eventoSeleccionado, pilotoSeleccionado] = await Promise.all([
     prisma.evento.findMany({
       where: {
+        // Coordinación 100% con el módulo de Eventos: solo fechas que están
+        // "mostradas" (publicadas en portada y en estados activos del ciclo).
+        visible_portada: true,
+        estado: { in: ["ABIERTO", "EN_CURSO", "FINALIZADO"] },
       },
       select: {
         id: true,
@@ -114,6 +118,7 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
         campeonato: {
           select: {
             nombre: true,
+            _count: { select: { categorias: true } },
           },
         },
         circuito: {
@@ -121,11 +126,15 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
             nombre: true,
           },
         },
+        _count: { select: { inscripciones: true } },
       },
       orderBy: [{ fecha_inicio: "desc" }, { nombre: "asc" }],
     }),
     prisma.perfilPiloto.findMany({
-      include: { usuario: true },
+      include: {
+        usuario: true,
+        _count: { select: { motocicletas: true, inscripciones: true } },
+      },
       orderBy: [{ usuario: { nombre: "asc" } }],
     }),
     eventoId
@@ -151,7 +160,7 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
     campeonatoId
       ? prisma.categoria.findMany({
           where: { campeonato_id: campeonatoId },
-          include: { campeonato: true },
+          include: { campeonato: true, _count: { select: { inscripciones: true } } },
           orderBy: { nombre: "asc" },
         })
       : Promise.resolve([]),
@@ -170,10 +179,53 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
     orderBy: { nombre: 'asc' },
   });
 
-  // Si no hay categorías para el campeonato del evento, devolvemos un fallback con todas las categorías
-  let categoriasFinal = categorias;
-  if (Array.isArray(categorias) && categorias.length === 0) {
-    categoriasFinal = await prisma.categoria.findMany({ include: { campeonato: true }, orderBy: { nombre: 'asc' } });
+  // Conteo de inscripciones por categoría acotado al evento seleccionado (referencia en la UI)
+  const conteoPorCategoriaEvento = new Map<string, number>();
+  if (eventoId) {
+    const filas = await prisma.inscripcion.groupBy({
+      by: ["categoria_id"],
+      where: { evento_id: eventoId },
+      _count: { _all: true },
+    });
+    for (const fila of filas) {
+      if (fila.categoria_id) conteoPorCategoriaEvento.set(fila.categoria_id, Number((fila as any)._count?._all ?? 0));
+    }
+  }
+
+  // Categorías realmente utilizadas por las inscripciones del evento seleccionado
+  // (coordinan la lista con los datos reales aunque el campeonato del evento no coincida)
+  const categoriasUsadasPorEvento = eventoId
+    ? await prisma.categoria.findMany({
+        where: { inscripciones: { some: { evento_id: eventoId } } },
+        include: { campeonato: true, _count: { select: { inscripciones: true } } },
+        orderBy: { nombre: "asc" },
+      })
+    : [];
+
+  // Lista final coordinada: primero las que el evento ya usa, luego el resto del campeonato
+  // (permite inscribir en cualquier categoría de la serie aunque aún no tenga inscritos)
+  const mapaCategorias = new Map<string, any>();
+  for (const c of [...categoriasUsadasPorEvento, ...categorias]) {
+    if (c?.id) mapaCategorias.set(String(c.id), c);
+  }
+  let categoriasFinal = Array.from(mapaCategorias.values());
+
+  // Fallback global solo si no hay categorías coordinadas de ninguna fuente
+  if (categoriasFinal.length === 0) {
+    categoriasFinal = await prisma.categoria.findMany({
+      include: { campeonato: true, _count: { select: { inscripciones: true } } },
+      orderBy: { nombre: 'asc' },
+    });
+  }
+
+  // Orden con evento seleccionado: primero las con inscritos en este evento (mayor a menor), luego alfabético
+  if (eventoId) {
+    categoriasFinal = categoriasFinal.slice().sort((a: any, b: any) => {
+      const ea = conteoPorCategoriaEvento.get(String(a.id)) ?? 0;
+      const eb = conteoPorCategoriaEvento.get(String(b.id)) ?? 0;
+      if (ea !== eb) return eb - ea;
+      return String(a.nombre || "").localeCompare(String(b.nombre || ""), "es");
+    });
   }
 
   return {
@@ -186,6 +238,8 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
       campeonato_id: evento.campeonato_id,
       campeonato_nombre: evento.campeonato?.nombre ?? "",
       circuito_nombre: evento.circuito?.nombre ?? "",
+      total_categorias: (evento as any).campeonato?._count?.categorias ?? 0,
+      total_inscripciones: (evento as any)._count?.inscripciones ?? 0,
     })),
     categorias: categoriasFinal.map((categoria) => ({
       id: categoria.id,
@@ -195,6 +249,8 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
       cilindrada_min: categoria.cilindrada_min,
       cilindrada_max: categoria.cilindrada_max,
       precio_inscripcion: categoria.precio_inscripcion,
+      total_inscripciones: (categoria as any)._count?.inscripciones ?? 0,
+      total_inscripciones_evento: conteoPorCategoriaEvento.get(categoria.id) ?? 0,
     })),
     pilotos: pilotos.map((piloto) => ({
       id: piloto.id,
@@ -202,6 +258,8 @@ export async function getInscripcionOptions(params: { eventoId?: string; pilotoI
       apellido: piloto.usuario.apellido,
       email: piloto.usuario.email,
       dorsal_preferido: piloto.dorsal_preferido,
+      total_motos: (piloto as any)._count?.motocicletas ?? 0,
+      total_inscripciones: (piloto as any)._count?.inscripciones ?? 0,
     })),
     motocicletas: motocicletas.map((motocicleta) => ({
       id: motocicleta.id,

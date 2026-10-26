@@ -208,7 +208,7 @@ export default function PilotosPage() {
         <div class="top">
           <div>
             <div class="planilla">Planilla de registro</div>
-            <h1>MWT</h1>
+            <img src="${window.location.origin}/MWT%20-%20NEGRO.png" alt="MWT Motorsport" style="width:140px;height:auto;display:block;margin:6px 0 2px;" />
           </div>
           <div class="meta">
             <div>Fecha de entrega: <strong>________</strong></div>

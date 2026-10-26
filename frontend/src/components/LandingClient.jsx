@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   FileText, Users, Flag, Shield, BarChart2, Bell, Calendar, MapPin,
@@ -31,14 +32,6 @@ const AREAS = [
 ];
 
 const MONTHS = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-
-function MwtLogo({ className = "w-9 h-9 rounded-[10px] bg-gradient-to-br from-blue-600 to-indigo-600" }) {
-  return (
-    <div className={`${className} flex items-center justify-center shadow-md shrink-0`}>
-      <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M12 3L22 21H2Z" opacity=".4" /><path d="M12 8L19 20H5Z" /></svg>
-    </div>
-  );
-}
 
 function EventStatusBadge({ estado }) {
   const map = { planificado: "Programado", publicado: "Publicado" };
@@ -82,11 +75,7 @@ export default function LandingClient({ eventos }) {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
         <div className="max-w-[1280px] mx-auto flex items-center justify-between px-4 sm:px-8 h-16 gap-2">
           <Link href="/" className="flex items-center gap-3 shrink-0">
-            <MwtLogo />
-            <div>
-              <div className="text-base font-black uppercase tracking-[0.2em] text-slate-900 leading-none">MWT</div>
-              <div className="text-[7px] font-black uppercase tracking-[0.22em] text-blue-600 mt-0.5">MOTORSPORT</div>
-            </div>
+            <Image src="/MWT - COLORS.png" alt="MWT Motorsport" width={156} height={61} className="w-28 sm:w-36 h-auto object-contain" priority unoptimized />
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
@@ -334,7 +323,10 @@ export default function LandingClient({ eventos }) {
       {/* Footer */}
       <footer className="py-6 border-t border-slate-100">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-8 flex items-center justify-between flex-wrap gap-3">
-          <div className="text-[10px] text-slate-400 uppercase tracking-[0.12em]">© 2026 MWT Motorsport · ACMG · FMG · Guatemala</div>
+          <div className="flex items-center gap-3">
+            <Image src="/MWT - NEGRO.png" alt="MWT Motorsport" width={104} height={31} className="h-6 w-auto object-contain opacity-80" unoptimized />
+            <div className="text-[10px] text-slate-400 uppercase tracking-[0.12em]">© 2026 MWT Motorsport · ACMG · FMG · Guatemala</div>
+          </div>
           <div className="flex items-center gap-3 sm:gap-6 flex-wrap">
             {["Privacidad", "Términos", "Contacto"].map((l) => (
               <span key={l} className="text-[10px] text-slate-400 hover:text-blue-600 cursor-pointer transition-colors uppercase tracking-[0.1em] font-bold">{l}</span>

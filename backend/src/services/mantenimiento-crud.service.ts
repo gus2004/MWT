@@ -408,6 +408,40 @@ export function getEntity(entityKey: string): CrudDefinition {
   return entity;
 }
 
+// ─────────────────────────────────────────────
+//  COORDINACIÓN ENTRE MÓDULOS (Mantenimiento → Eventos → Inscripciones → …)
+//  Un registro del catálogo NO se elimina si los módulos conectados todavía
+//  lo usan: cada entidad declara sus referencias aguas abajo y el borrado
+//  se bloquea con un mensaje claro y los conteos reales.
+// ─────────────────────────────────────────────
+
+interface ReferenciaDeColeccion {
+  model: any;
+  where: (id: string) => Record<string, unknown>;
+  label: string;
+}
+
+const REFERENCIAS: Record<string, ReferenciaDeColeccion[]> = {
+  marcas: [{ model: prisma.motocicleta, where: (id) => ({ marca_id: id }), label: 'motocicletas' }],
+  motocicletas: [{ model: prisma.inscripcion, where: (id) => ({ motocicleta_id: id }), label: 'inscripciones' }],
+  circuitos: [{ model: prisma.evento, where: (id) => ({ circuito_id: id }), label: 'eventos' }],
+  campeonatos: [
+    { model: prisma.evento, where: (id) => ({ campeonato_id: id }), label: 'eventos (fechas)' },
+    { model: prisma.categoria, where: (id) => ({ campeonato_id: id }), label: 'categorías' },
+  ],
+  categorias: [
+    { model: prisma.inscripcion, where: (id) => ({ categoria_id: id }), label: 'inscripciones' },
+    { model: prisma.heat, where: (id) => ({ categoria_id: id }), label: 'heats' },
+    { model: prisma.clasificacionGeneral, where: (id) => ({ categoria_id: id }), label: 'clasificaciones' },
+  ],
+  pilotos: [{ model: prisma.inscripcion, where: (id) => ({ piloto_id: id }), label: 'inscripciones' }],
+  patrocinadores: [
+    { model: prisma.patrocinadorEvento, where: (id) => ({ patrocinador_id: id }), label: 'eventos patrocinados' },
+    { model: prisma.patrocinadorCampeonato, where: (id) => ({ patrocinador_id: id }), label: 'series patrocinadas' },
+  ],
+  sanciones: [{ model: prisma.apelacion, where: (id) => ({ sancion_id: id }), label: 'apelaciones' }],
+};
+
 async function asignarRolesUsuario(usuarioId: string, rolesInput: unknown) {
   let nombres: string[] = [];
   if (Array.isArray(rolesInput)) {
@@ -486,6 +520,25 @@ export function updateEntity(entityKey: string, id: string, data: Record<string,
   return getEntity(entityKey).update(id, data, operador);
 }
 
-export function removeEntity(entityKey: string, id: string, operador: string) {
-  return getEntity(entityKey).remove(id, operador);
+export async function removeEntity(entityKey: string, id: string, operador: string) {
+  const entity = getEntity(entityKey);
+
+  // Coordinación con los módulos conectados: bloquear el borrado si el
+  // registro sigue siendo usado aguas abajo (conteos reales por referencia).
+  const referencias = REFERENCIAS[entityKey] || [];
+  const dependencias: string[] = [];
+  for (const ref of referencias) {
+    const total = await ref.model
+      .count({ where: ref.where(id) })
+      .catch(() => 0);
+    if (total > 0) dependencias.push(`${total} ${ref.label}`);
+  }
+  if (dependencias.length) {
+    throw new Error(
+      `No se puede eliminar: hay ${dependencias.join(' y ')} conectados a este registro. ` +
+      'Los módulos que lo usan lo coordinan; elimina o desvincula esos datos primero.'
+    );
+  }
+
+  return entity.remove(id, operador);
 }

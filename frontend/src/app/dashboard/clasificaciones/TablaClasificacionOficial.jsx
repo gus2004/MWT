@@ -287,7 +287,7 @@ export default function TablaClasificacionOficial({
       <div ref={tablaRef} style={{ border: "1px solid #bfbfbf", borderRadius: 10, overflow: "hidden" }}>
         <div style={{ background: "#fff", color: "#1f2937", padding: "8px 12px", display: "grid", gridTemplateColumns: "72px 1fr 140px", alignItems: "center", borderBottom: "2px solid #2f4f4f" }}>
           <div className="image-slot">
-            <Image src={logoIzquierdaUrl || "/LOGO.png"} alt="Logo izquierdo" width={56} height={44} style={{ width: "auto", height: "auto" }} unoptimized />
+            <Image src={logoIzquierdaUrl || "/MWT - COLORS.png"} alt="Logo izquierdo" width={56} height={44} style={{ width: "auto", height: "auto" }} unoptimized />
           </div>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: "#254b4a" }}>{campeonato}</div>

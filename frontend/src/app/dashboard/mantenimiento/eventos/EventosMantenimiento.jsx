@@ -115,6 +115,7 @@ export default function EventosMantenimiento() {
   const buildPayload = () => ({
     id: editingId || undefined,
     campeonato_id: draft.campeonato_id || null,
+    circuito_id: draft.circuito_id || null,
     nombre: draft.nombre,
     fecha_inicio: draft.fecha_inicio,
     fecha_fin: draft.fecha_fin,
@@ -148,6 +149,7 @@ export default function EventosMantenimiento() {
       const result = await publishEvento({
         id: item.id,
         campeonato_id: item.campeonato_id || item.campeonato?.id || item.campeonato_nombre || null,
+        circuito_id: item.circuito_id || item.circuito?.id || null,
         nombre: item.nombre,
         fecha_inicio: item.fecha_inicio,
         fecha_fin: item.fecha_fin,

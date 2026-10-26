@@ -10,11 +10,6 @@ export async function getResumen(eventoId: string) {
 
   if (!evento) throw new Error('Evento no encontrado');
 
-  const categorias = await prisma.categoria.findMany({
-    where: { campeonato_id: evento.campeonato_id },
-    orderBy: { nombre: 'asc' },
-  });
-
   // Count inscritos por categoria para este evento
   const inscritos = await prisma.inscripcion.groupBy({
     by: ['categoria_id'],
@@ -25,7 +20,24 @@ export async function getResumen(eventoId: string) {
   const conteoMap: Record<string, number> = {};
   inscritos.forEach((r) => (conteoMap[r.categoria_id] = r._count.categoria_id));
 
-  const categoriasConConteo = categorias.map((c) => ({
+  const categorias = await prisma.categoria.findMany({
+    where: {
+      OR: [
+        { campeonato_id: evento.campeonato_id },
+        ...(inscritos.length ? [{ id: { in: inscritos.map((r) => r.categoria_id) } }] : []),
+      ],
+    },
+    orderBy: { nombre: 'asc' },
+  });
+  const categoriasVisibles = Array.from(categorias.reduce((map, categoria) => {
+    const anterior = map.get(categoria.nombre.toLowerCase());
+    if (!anterior || (conteoMap[categoria.id] || 0) > (conteoMap[anterior.id] || 0)) {
+      map.set(categoria.nombre.toLowerCase(), categoria);
+    }
+    return map;
+  }, new Map<string, (typeof categorias)[number]>()).values());
+
+  const categoriasConConteo = categoriasVisibles.map((c) => ({
     id: c.id,
     nombre: c.nombre,
     cilindrada_min: c.cilindrada_min,

@@ -36,7 +36,12 @@ export default function EventCarousel({ eventos }) {
   }, [slides.length]);
 
   const current = slides[activeIndex] || null;
-  const featured = slides[0] || null;
+  const organizer = formatOrganizer(current?.organizador).toLowerCase();
+  const brand = organizer.includes("yamaha")
+    ? { src: "/Yamaha-Logо.png", label: "Yamaha" }
+    : organizer.includes("acmg")
+      ? { src: "/LOGO-ACMG.png", label: "ACMG" }
+      : { src: "/MWT - COLORS.png", label: "MWT Motorsport" };
 
   const goTo = (nextIndex) => {
     if (!slides.length) return;
@@ -58,11 +63,9 @@ export default function EventCarousel({ eventos }) {
 
             {/* Brand rack */}
             <div className="flex items-center gap-3 mb-6">
-              {["/LOGO-ACMG.png", "/Yamaha-Logо.png"].map((src) => (
-                <div key={src} className="h-16 bg-white/95 rounded-[14px] border border-white/20 px-4 flex items-center justify-center shadow-sm">
-                  <Image src={src} alt="Logo del evento" width={140} height={64} className="w-auto h-12 object-contain" unoptimized />
-                </div>
-              ))}
+              <div className="h-16 bg-white/95 rounded-[14px] border border-white/20 px-4 flex items-center justify-center shadow-sm">
+                <Image src={brand.src} alt={`Logo ${brand.label}`} width={140} height={64} className="w-auto h-12 object-contain" unoptimized />
+              </div>
             </div>
 
             <div className="flex items-center gap-2 mb-3">

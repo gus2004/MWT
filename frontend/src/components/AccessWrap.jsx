@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChevronLeft } from "lucide-react";
 
 export default function AccessWrap({ children, title, sub, onBack }) {
@@ -16,10 +17,7 @@ export default function AccessWrap({ children, title, sub, onBack }) {
           <span className="text-xs sm:text-sm font-black uppercase tracking-[0.1em]">Volver</span>
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[8px] bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-600/30">
-            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white"><path d="M12 3L22 21H2Z" opacity=".4" /><path d="M12 8L19 20H5Z" /></svg>
-          </div>
-          <span className="text-sm sm:text-base font-black uppercase tracking-[0.15em] text-white">MWT</span>
+          <Image src="/MWT - BLANCO.png" alt="MWT Motorsport" width={128} height={50} className="w-24 sm:w-32 h-auto object-contain" unoptimized />
         </div>
         <div className="w-16 sm:w-20" />
       </nav>

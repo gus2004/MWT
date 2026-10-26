@@ -14,7 +14,7 @@ import { authRequired, requireRoles } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-router.use(authRequired, requireRoles('ADMIN', 'STAFF'));
+router.use(authRequired, requireRoles('ADMIN', 'STAFF', 'STAFF_TECNICO', 'JUEZ_MESA'));
 
 // Árbol de carpetas de eventos
 router.get('/arbol', arbolSeries);

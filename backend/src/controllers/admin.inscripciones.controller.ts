@@ -16,6 +16,7 @@ export async function createInscripcionController(req: Request, res: Response) {
     const message = err?.message || 'Error creando inscripcion';
     const controlledMessages = [
       'Evento no encontrado',
+      'El evento no está mostrado en el módulo de Eventos',
       'Piloto no encontrado',
       'Categoría no encontrada',
       'Motocicleta no encontrada',

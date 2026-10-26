@@ -44,6 +44,58 @@ async function request(path, options = {}) {
   return data;
 }
 
+async function requestFormData(path, formData) {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      // Sin Content-Type: el navegador lo fija con el boundary del multipart.
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok) {
+    const error = new Error(data?.message || data?.error || `HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+/** URL absoluta de un archivo de evidencia servido por el backend. */
+export function fileUrl(rutaArchivo) {
+  if (!rutaArchivo) return "";
+  if (String(rutaArchivo).startsWith("http")) return rutaArchivo;
+  return `${API_URL}${rutaArchivo}`;
+}
+
+/** Descarga binaria autenticada (blob) de reportes: CSV / PDF del comisariato. */
+export async function descargarReporteComisariato(eventoId, formato) {
+  const token = getToken();
+  const qs = eventoId ? `?evento_id=${encodeURIComponent(eventoId)}` : "";
+  const res = await fetch(`${API_URL}/api/soporte/comisariato/export/${formato}${qs}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const j = await res.json();
+      message = j?.message || message;
+    } catch { /* respuesta binaria */ }
+    throw new Error(message);
+  }
+  return res.blob();
+}
+
+/** Nombre del archivo desde el header Content-Disposition del backend. */
+export function nombreDesdeHeader(res) {
+  const cd = res.headers?.get?.("content-disposition") || "";
+  const m = cd.match(/filename="?([^"]+)"?/i);
+  return m ? m[1] : null;
+}
+
 export const soporteApi = {
   // Sanciones
   listSanciones: () => request("/api/soporte/sanciones").then((d) => d?.items || []),
@@ -81,6 +133,46 @@ export const soporteApi = {
 
   // Reportes
   getResumenReportes: () => request("/api/soporte/reportes/resumen"),
+
+  // Asistente IA del comisariato
+  calificarIA: (payload) => request("/api/soporte/ia/calificar", { method: "POST", body: JSON.stringify(payload) }),
+
+  // ── Reglamento del evento en PDF (el sistema LO LEE y carga sus artículos) ──
+  subirReglamentoPdf: (file, eventoId) => {
+    const fd = new FormData();
+    fd.append("archivo", file);
+    fd.append("evento_id", eventoId);
+    return requestFormData("/api/soporte/reglamento/pdf", fd);
+  },
+  listReglamentoDocumentos: () => request("/api/soporte/reglamento/documentos").then((d) => d?.items || []),
+  borrarReglamentoPdf: (eventoId) => request(`/api/soporte/reglamento/pdf/${eventoId}`, { method: "DELETE" }),
+  alertasIA: () => request("/api/soporte/ia/alertas").then((d) => d?.items || []),
+
+  // Catálogo del reglamento (alimenta la sugerencia de artículo de la IA)
+  listReglamento: () => request("/api/soporte/reglamento").then((d) => d?.items || []),
+  createArticuloReglamento: (payload) => request("/api/soporte/reglamento", { method: "POST", body: JSON.stringify(payload) }),
+  deleteArticuloReglamento: (id) => request(`/api/soporte/reglamento/${id}`, { method: "DELETE" }),
+
+  // Evidencias de incidencias (imágenes/videos: solo respaldo, sin análisis IA)
+  subirEvidencia: (archivo, inscripcionId) => {
+    const fd = new FormData();
+    fd.append("archivo", archivo);
+    if (inscripcionId) fd.append("inscripcion_id", inscripcionId);
+    return requestFormData("/api/soporte/evidencias", fd);
+  },
+  listEvidencias: (opt = {}) => {
+    const qs = new URLSearchParams();
+    if (opt.inscripcion_id) qs.set("inscripcion_id", opt.inscripcion_id);
+    if (opt.sancion_id) qs.set("sancion_id", opt.sancion_id);
+    if (opt.soloSinSancion) qs.set("soloSinSancion", "1");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request(`/api/soporte/evidencias${suffix}`).then((d) => d?.items || []);
+  },
+  borrarEvidencia: (id) => request(`/api/soporte/evidencias/${id}`, { method: "DELETE" }),
+
+  // Resumen estructurado del comisariato por evento (CSV y PDF vía descargarReporteComisariato)
+  resumenComisariato: (eventoId) =>
+    request(`/api/soporte/comisariato/resumen${eventoId ? `?evento_id=${encodeURIComponent(eventoId)}` : ""}`),
 };
 
 export default soporteApi;

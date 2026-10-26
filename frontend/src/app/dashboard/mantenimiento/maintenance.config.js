@@ -151,7 +151,7 @@ export const MAINTENANCE_ENTITIES = {
       field("fecha_inicio", "Fecha inicio", "date", { required: true }),
       field("fecha_fin", "Fecha fin", "date", { required: true }),
       field("estado", "Estado", "select", { options: ["BORRADOR", "ABIERTO", "EN_CURSO", "FINALIZADO", "CANCELADO"] }),
-      field("visible_portada", "Mostrar en página principal", "checkbox", { defaultValue: true }),
+      field("visible_portada", "Mostrar en página principal", "checkbox", { defaultValue: false }),
       field("costo_base", "Costo base", "number", { defaultValue: 0 }),
     ],
     [column("nombre", "Nombre"), column("fecha_inicio", "Inicio"), column("fecha_fin", "Fin"), column("estado", "Estado"), column("visible_portada", "Portada")]

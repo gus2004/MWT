@@ -149,6 +149,7 @@ export default function InscripcionesReportes({ inscripciones = [], eventGroups 
         </style>
       </head>
       <body>
+        <img src="${window.location.origin}/MWT%20-%20NEGRO.png" alt="MWT Motorsport" style="width:120px;height:auto;display:block;margin-bottom:10px;" />
         <h1>Reporte de Inscripciones</h1>
         <div class="sub">Generado el ${new Date().toLocaleDateString("es-GT")} · ${filtered.length} registros</div>
         ${tabla}

@@ -9,6 +9,11 @@ const nextConfig = {
         source: "/api/:path*",
         destination: `${BACKEND_ORIGIN}/api/:path*`,
       },
+      {
+        // Evidencias del comisariato (imágenes y videos) servidas por el backend
+        source: "/uploads/:path*",
+        destination: `${BACKEND_ORIGIN}/uploads/:path*`,
+      },
     ];
   },
   turbopack: {},

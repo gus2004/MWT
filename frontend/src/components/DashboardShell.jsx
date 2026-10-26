@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -151,13 +152,8 @@ export default function DashboardShell({ children }) {
       {/* Brand Header */}
       <div className="px-4 pt-4 pb-3 border-b border-border/40">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="w-10 h-10 rounded-[10px] bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M12 3L22 21H2Z" opacity=".4" /><path d="M12 8L19 20H5Z" /></svg>
-          </div>
-          <div>
-            <div className="text-base font-black uppercase tracking-[0.18em] text-sidebar-text leading-none">MWT</div>
-            <div className="text-[10px] text-sidebar-text/70 mt-0.5 font-medium">Centro de control</div>
-          </div>
+          <Image src="/MWT - COLORS.png" alt="MWT Motorsport" width={168} height={65} className="w-40 h-auto object-contain" priority unoptimized />
+          <div className="text-[10px] text-sidebar-text/70 font-medium">Centro de control</div>
         </div>
         <button onClick={() => setOpen(false)} className="lg:hidden mt-3 w-full text-sidebar-text hover:text-sidebar-accent text-left py-1.5 text-sm"><X size={18} /> Cerrar menú</button>
       </div>
@@ -299,6 +295,8 @@ export default function DashboardShell({ children }) {
         <header className="h-16 shrink-0 bg-card border-b border-border flex items-center justify-between px-6 gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button onClick={() => setOpen(true)} className="lg:hidden text-foreground/70 hover:text-foreground p-2 rounded-[10px] hover:bg-muted"><Menu size={20} /></button>
+            <Image src="/MWT - COLORS.png" alt="MWT Motorsport" width={120} height={35} className="logo-light-theme h-7 w-auto object-contain shrink-0" unoptimized />
+            <Image src="/MWT - BLANCO.png" alt="MWT Motorsport" width={120} height={35} className="logo-dark-theme h-7 w-auto object-contain shrink-0" unoptimized />
             <div className="min-w-0">
               <div className="text-[9px] font-black uppercase tracking-[0.18em] text-muted-foreground">Sistema interno MWT</div>
               <div className="text-sm font-black uppercase tracking-[0.04em] text-foreground truncate">Panel de control</div>

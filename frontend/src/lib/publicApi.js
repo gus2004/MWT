@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_URL = process.env.NEXT_PUBLIC_API_URL
+  || (typeof window === "undefined" ? (process.env.BACKEND_ORIGIN || "http://localhost:3001") : "");
 
 function toSafeEvent(e) {
   return {
@@ -14,7 +15,7 @@ function toSafeEvent(e) {
 export async function getProximosEventos(limit = 4) {
   try {
     const res = await fetch(`${API_URL}/api/public/eventos?limit=${limit}`, {
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
 
     if (!res.ok) return [];

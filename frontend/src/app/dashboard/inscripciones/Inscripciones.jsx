@@ -227,17 +227,50 @@ export default function Inscripciones() {
           })
           .map((ev) => ({
             value: String(ev.id),
-            label: `${ev.nombre}${fmtEventoFecha(ev.fecha_inicio) ? ` · ${fmtEventoFecha(ev.fecha_inicio)}` : ""}`,
+            label: [
+              `${ev.nombre}${fmtEventoFecha(ev.fecha_inicio) ? ` · ${fmtEventoFecha(ev.fecha_inicio)}` : ""}`,
+              `(${ev.total_categorias ?? 0} ${ev.total_categorias === 1 ? "categoría" : "categorías"} · ${ev.total_inscripciones ?? 0} ${ev.total_inscripciones === 1 ? "inscripción" : "inscripciones"})`,
+            ].join(" "),
           })),
       }));
   }, [optionsByEvent]);
   const optionsByCategory = useMemo(() => toArray(options.categorias), [options.categorias]);
   const categoriasDisponibles = useMemo(() => {
     const evento = optionsByEvent.find((e) => String(e.id) === String(draft.evento_id));
-    if (!evento?.campeonato_id || !optionsByCategory.length) return optionsByCategory;
-    const filtered = optionsByCategory.filter((c) => String(c.campeonato_id) === String(evento.campeonato_id));
-    return filtered.length ? filtered : optionsByCategory;
+    let lista = optionsByCategory;
+    if (evento?.campeonato_id && optionsByCategory.length) {
+      const filtradas = lista.filter((c) => String(c.campeonato_id) === String(evento.campeonato_id));
+      lista = filtradas.length ? filtradas : lista;
+    }
+    // Sin duplicados y coordinadas: con evento elegido, primero las que tienen inscritos en él
+    return Array.from(new Map(lista.map((c) => [String(c.id), c])).values())
+      .sort((a, b) => {
+        if (draft.evento_id) {
+          const ea = a.total_inscripciones_evento ?? 0;
+          const eb = b.total_inscripciones_evento ?? 0;
+          if (ea !== eb) return eb - ea;
+        }
+        return String(a.nombre || "").localeCompare(String(b.nombre || ""), "es");
+      });
   }, [optionsByEvent, optionsByCategory, draft.evento_id]);
+  // Categorías agrupadas por campeonato: si hay más de un campeonato en la lista se renderizan optgroups
+  const categoriasAgrupadas = useMemo(() => {
+    const map = new Map();
+    categoriasDisponibles.forEach((c) => {
+      const key = String(c.campeonato_id || "sin-campeonato");
+      if (!map.has(key)) map.set(key, { key, campeonato_nombre: c.campeonato_nombre || "Otras categorías", items: [] });
+      map.get(key).items.push(c);
+    });
+    return Array.from(map.values());
+  }, [categoriasDisponibles]);
+  const categoriaLabel = (categoria) => {
+    const cc = categoria.cilindrada_min || categoria.cilindrada_max ? `${categoria.cilindrada_min}-${categoria.cilindrada_max} cc` : "";
+    const insc = draft.evento_id
+      ? (categoria.total_inscripciones_evento ?? 0)
+      : (categoria.total_inscripciones ?? 0);
+    const detalles = [cc, `${insc} ${insc === 1 ? "inscripción" : "inscripciones"}`].filter(Boolean);
+    return `${categoria.nombre}${detalles.length ? ` (${detalles.join(" · ")})` : ""}`;
+  };
   const optionsByPilot = useMemo(() => toArray(options.pilotos), [options.pilotos]);
   const optionsByMoto = useMemo(() => toArray(options.motocicletas), [options.motocicletas]);
   const stats = useMemo(() => {
@@ -327,22 +360,24 @@ export default function Inscripciones() {
       .filter((item) => !filterEvento || String(item.evento?.id || item.evento_id || "") === filterEvento)
       .forEach((item) => {
         const id = String(item.categoria?.id || item.categoria_id || "");
-        if (!id || seen.has(id)) return;
-        seen.set(id, item.categoria?.nombre || `Categoría ${id}`);
+        if (!id) return;
+        const previa = seen.get(id) || { id, nombre: item.categoria?.nombre || `Categoría ${id}`, total: 0 };
+        previa.total += 1;
+        seen.set(id, previa);
       });
-    return Array.from(seen.entries()).map(([id, nombre]) => ({ id, nombre }));
+    return Array.from(seen.values()).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
   }, [inscripciones, filterEvento]);
 
   const dorsalFilterOptions = useMemo(() => {
-    const seen = new Set();
-    const values = [];
+    const conteo = new Map();
     inscripciones.forEach((item) => {
       const dorsal = String(item.dorsal_asignado || "");
-      if (!dorsal || seen.has(dorsal)) return;
-      seen.add(dorsal);
-      values.push(dorsal);
+      if (!dorsal) return;
+      conteo.set(dorsal, (conteo.get(dorsal) || 0) + 1);
     });
-    return values.sort((a, b) => Number(a) - Number(b));
+    return Array.from(conteo.entries())
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([dorsal, total]) => ({ dorsal, total }));
   }, [inscripciones]);
 
   const matchingInscripcion = useMemo(() => {
@@ -467,7 +502,7 @@ export default function Inscripciones() {
         <div class="top">
           <div>
             <div class="comprobante">Comprobante de inscripción</div>
-            <h1>MWT</h1>
+            <img src="${window.location.origin}/MWT%20-%20NEGRO.png" alt="MWT Motorsport" style="width:140px;height:auto;display:block;margin:6px 0 2px;" />
           </div>
           <div class="meta">
             <div>N.º <strong>${esc(preview.id)}</strong></div>
@@ -603,17 +638,30 @@ export default function Inscripciones() {
 
             <section className={styles.cardSection} style={{ marginBottom: 18 }}>
               <div className={styles.sectionHeader}><div><h2 className={styles.sectionTitle}>Agregar inscripción</h2><p className={styles.sectionText}>Selecciona un evento, categoría, piloto, moto y dorsal.</p></div><span className={styles.statusBadge}>Alta</span></div>
+              {!optionsLoading && optionsByEvent.length === 0 ? (
+                <p className={styles.fieldHint} style={{ color: "#dc2626", fontWeight: 700 }}>
+                  No hay eventos mostrados en el módulo de Eventos. Las inscripciones se habilitan automáticamente cuando una fecha se muestra en portada del módulo de Eventos.
+                </p>
+              ) : null}
               {optionsLoading ? <p className={styles.fieldHint}>Cargando catálogos relacionados...</p> : null}
 
               <form className={styles.formGrid} onSubmit={handleCreate}>
-                <label className={styles.field}><span className={styles.fieldLabel}>Evento</span><SearchSelect groups={eventGroups} value={draft.evento_id || ""} onChange={(v) => setField("evento_id", v)} placeholder="Seleccione un evento" searchPlaceholder="Buscar por fecha o campeonato..." className="w-full" inputClassName={styles.input} /></label>
-                <label className={styles.field}><span className={styles.fieldLabel}>Categoría</span><select className={styles.input} value={draft.categoria_id} onChange={(e) => setField("categoria_id", e.target.value)} required disabled={!draft.evento_id}><option value="">{draft.evento_id ? (categoriasDisponibles.length ? "Seleccione una categoría" : "No hay categorías para este evento") : "Primero seleccione un evento"}</option>{categoriasDisponibles.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre} {categoria.cilindrada_min || categoria.cilindrada_max ? `(${categoria.cilindrada_min}-${categoria.cilindrada_max} cc)` : ""}</option>)}</select></label>
-                <label className={styles.field}><span className={styles.fieldLabel}>Piloto</span><SearchSelect options={optionsByPilot.map((piloto) => ({ value: String(piloto.id), label: `${[piloto.nombre, piloto.apellido].filter(Boolean).join(" ")}${piloto.email ? ` - ${piloto.email}` : ""}`.trim() }))} value={draft.piloto_id || ""} onChange={(v) => setField("piloto_id", v)} placeholder="Seleccione un piloto existente" searchPlaceholder="Buscar por nombre..." className="w-full" /><div style={{ marginTop: 8 }}><button type="button" onClick={goToCrearPiloto} style={{ background: "#0ea5a4", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontWeight: 700, minHeight: 40 }}>+ Agregar piloto nuevo</button></div></label>
+                <label className={styles.field}><span className={styles.fieldLabel}>Evento</span><SearchSelect groups={eventGroups} value={draft.evento_id || ""} onChange={(v) => setField("evento_id", v)} placeholder={optionsByEvent.length === 0 ? "No hay eventos mostrados en Eventos" : "Seleccione un evento"} searchPlaceholder="Buscar por fecha o campeonato..." className="w-full" inputClassName={styles.input} /></label>
+                <label className={styles.field}><span className={styles.fieldLabel}>Categoría</span><select className={styles.input} value={draft.categoria_id} onChange={(e) => setField("categoria_id", e.target.value)} required disabled={!draft.evento_id}><option value="">{draft.evento_id ? (categoriasDisponibles.length ? "Seleccione una categoría" : "No hay categorías para este evento") : "Primero seleccione un evento"}</option>{categoriasAgrupadas.length > 1 ? categoriasAgrupadas.map((grupo) => <optgroup key={grupo.key} label={grupo.campeonato_nombre}>{grupo.items.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoriaLabel(categoria)}</option>)}</optgroup>) : categoriasDisponibles.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoriaLabel(categoria)}</option>)}</select></label>
+                <label className={styles.field}><span className={styles.fieldLabel}>Piloto</span><SearchSelect options={optionsByPilot.map((piloto) => {
+                  const persona = [piloto.nombre, piloto.apellido].filter(Boolean).join(" ");
+                  const motos = piloto.total_motos ?? 0;
+                  const insc = piloto.total_inscripciones ?? 0;
+                  return {
+                    value: String(piloto.id),
+                    label: `${persona}${piloto.email ? ` - ${piloto.email}` : ""} (${motos} ${motos === 1 ? "moto" : "motos"} · ${insc} ${insc === 1 ? "inscripción" : "inscripciones"})`.trim(),
+                  };
+                })} value={draft.piloto_id || ""} onChange={(v) => setField("piloto_id", v)} placeholder="Seleccione un piloto existente" searchPlaceholder="Buscar por nombre..." className="w-full" /><div style={{ marginTop: 8 }}><button type="button" onClick={goToCrearPiloto} style={{ background: "#0ea5a4", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontWeight: 700, minHeight: 40 }}>+ Agregar piloto nuevo</button></div></label>
                 <label className={styles.field}>
                   <span className={styles.fieldLabel}>Motocicleta</span>
                   <select className={styles.input} value={draft.motocicleta_id} onChange={(e) => setField("motocicleta_id", e.target.value)} required disabled={!draft.piloto_id}>
                     <option value="">{draft.piloto_id ? "Seleccione una motocicleta" : "Primero seleccione un piloto"}</option>
-                    {optionsByMoto.filter((moto) => String(moto.piloto_id) === String(draft.piloto_id)).map((motocicleta) => <option key={motocicleta.id} value={motocicleta.id}>{motocicleta.modelo} {motocicleta.apodo_moto ? `- ${motocicleta.apodo_moto}` : ""} {motocicleta.marca_nombre ? `(${motocicleta.marca_nombre})` : ""}</option>)}
+                    {optionsByMoto.filter((moto) => String(moto.piloto_id) === String(draft.piloto_id)).map((motocicleta) => <option key={motocicleta.id} value={motocicleta.id}>{motocicleta.modelo} {motocicleta.apodo_moto ? `- ${motocicleta.apodo_moto}` : ""} {motocicleta.marca_nombre || motocicleta.anio ? `(${[motocicleta.marca_nombre, motocicleta.anio].filter(Boolean).join(", ")})` : ""}</option>)}
                   </select>
                   <div style={{ marginTop: 8 }}>
                     <button type="button" className={styles.secondaryBtn} onClick={openMotoModal} disabled={!draft.piloto_id} style={{ minHeight: 40 }}>
@@ -655,8 +703,8 @@ export default function Inscripciones() {
                 <input className={styles.input} type="search" placeholder="Buscar por ID, piloto, email, evento o dorsal..." value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: "100%" }} />
                 <select className={styles.input} value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}><option value="">Todos los estados</option><option value="PENDIENTE">Pendiente</option><option value="PAGADA">Pagada</option><option value="VALIDADA">Validada</option><option value="RECHAZADA">Rechazada</option></select>
                 <SearchSelect clearable groups={eventGroups} value={filterEvento || ""} onChange={(v) => { setFilterEvento(v); if (v !== filterEvento) setFilterCategoria(""); }} placeholder="Todos los eventos" searchPlaceholder="Buscar evento o campeonato..." className="w-full" inputClassName={styles.input} />
-                <select className={styles.input} value={filterCategoria} onChange={(e) => setFilterCategoria(e.target.value)}><option value="">Todas las categorías</option>{categoriaFilterOptions.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre}</option>)}</select>
-                <select className={styles.input} value={filterDorsal} onChange={(e) => setFilterDorsal(e.target.value)}><option value="">Todos los dorsales</option>{dorsalFilterOptions.map((dorsal) => <option key={dorsal} value={dorsal}>{dorsal}</option>)}</select>
+                <select className={styles.input} value={filterCategoria} onChange={(e) => setFilterCategoria(e.target.value)}><option value="">Todas las categorías</option>{categoriaFilterOptions.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre} ({categoria.total})</option>)}</select>
+                <select className={styles.input} value={filterDorsal} onChange={(e) => setFilterDorsal(e.target.value)}><option value="">Todos los dorsales</option>{dorsalFilterOptions.map((item) => <option key={item.dorsal} value={item.dorsal}>{item.dorsal} ({item.total})</option>)}</select>
                 <button type="button" className={styles.secondaryBtn} onClick={clearListFilters} style={{ minHeight: 44 }}>Limpiar filtros</button>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>

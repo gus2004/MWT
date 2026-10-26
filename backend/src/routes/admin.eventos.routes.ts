@@ -4,9 +4,11 @@ import { authRequired, requireRoles } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-router.post('/publish', authRequired, requireRoles('ADMIN', 'STAFF'), publishEventoController);
-router.post('/draft', authRequired, requireRoles('ADMIN', 'STAFF'), saveDraftEventoController);
-router.delete('/:evento_id', authRequired, requireRoles('ADMIN', 'STAFF'), deleteEventoController);
+const puedeOrganizar = requireRoles('ADMIN', 'STAFF', 'STAFF_TECNICO', 'JUEZ_MESA');
+
+router.post('/publish', authRequired, puedeOrganizar, publishEventoController);
+router.post('/draft', authRequired, puedeOrganizar, saveDraftEventoController);
+router.delete('/:evento_id', authRequired, puedeOrganizar, deleteEventoController);
 
 // Development-only: allow publishing without auth for local testing
 if (process.env.NODE_ENV !== 'production') {

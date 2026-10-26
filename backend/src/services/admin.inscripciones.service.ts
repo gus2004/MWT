@@ -69,6 +69,14 @@ export async function createInscripcionToDb(input: CreateInscripcionInput) {
   const motocicleta = await resolveMotocicleta(input.motocicleta_id);
 
   if (!evento) throw new Error("Evento no encontrado");
+
+  // Coordinación 100% con el módulo de Eventos: una fecha solo admite
+  // inscripciones cuando está mostrada (publicada en portada) y en un
+  // estado activo del ciclo del evento.
+  const estadosInscribibles = ["ABIERTO", "EN_CURSO", "FINALIZADO"];
+  if (!evento.visible_portada || !estadosInscribibles.includes(String(evento.estado))) {
+    throw new Error("El evento no está mostrado en el módulo de Eventos: publica la fecha en Eventos para habilitar inscripciones");
+  }
   if (!piloto) throw new Error("Piloto no encontrado");
   if (!categoria) throw new Error("Categoría no encontrada");
   if (!motocicleta) throw new Error("Motocicleta no encontrada");
