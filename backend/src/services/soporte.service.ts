@@ -436,19 +436,36 @@ export async function listAuditoria(limit = 200) {
 // ─────────────────────────────────────────────
 
 export async function getReporteResumen() {
-  const [pilotos, eventos, inscripciones, sanciones, ingresos, marcaRows, crecimiento, eventosInsc] = await Promise.all([
+  const [pilotos, eventos, inscripciones, sanciones, ingresosPagos, ingresosPorCategoria, marcaRows, crecimiento, eventosInsc] = await Promise.all([
     prisma.perfilPiloto.count(),
     prisma.evento.findMany({
       orderBy: { fecha_inicio: 'desc' },
       include: { circuito: true, campeonato: true },
     }),
     prisma.inscripcion.findMany({
-      include: { evento: true, categoria: true, pago: true, motocicleta: { include: { marca: true } } },
+      include: {
+        evento: true,
+        categoria: true,
+        pago: true,
+        motocicleta: { include: { marca: true } },
+        piloto: { include: { usuario: { select: { nombre: true, apellido: true, email: true } } } },
+      },
     }),
     prisma.sancion.count(),
     prisma.pago.aggregate({
       _sum: { monto: true },
       where: { estado_pago: 'CONFIRMADO' },
+    }),
+    // Ingresos calculados sobre el precio de inscripción de la categoría
+    // (no solo el monto del pago, que puede diferir). Se considera cada
+    // inscripción en estado PAGADA o VALIDADA.
+    prisma.inscripcion.findMany({
+      where: {
+        estado: { in: ['PAGADA', 'VALIDADA'] },
+      },
+      include: {
+        categoria: { select: { precio_inscripcion: true } },
+      },
     }),
     prisma.motocicleta.groupBy({
       by: ['marca_id'],
@@ -471,13 +488,36 @@ export async function getReporteResumen() {
   const porEvento = eventos.map((ev) => {
     const total = inscripciones.filter((i) => i.evento_id === ev.id);
     const validas = total.filter((i) => i.estado === 'VALIDADA' || i.estado === 'PAGADA');
+    // El ingreso se reconoce por el estado de la inscripción. Una inscripción
+    // PAGADA o VALIDADA ya forma parte del ingreso, aunque el registro de pago
+    // no exista o todavía no tenga estado CONFIRMADO.
+    const inscripcionesPagadas = total.filter((i) => i.estado === 'PAGADA' || i.estado === 'VALIDADA');
+    const ingreso = inscripcionesPagadas.reduce((sum, i) => sum + Number(i.categoria?.precio_inscripcion || 0), 0);
     return {
       evento_id: ev.id,
       evento: ev.nombre,
       fecha_inicio: ev.fecha_inicio,
       estado: ev.estado,
+      campeonato_id: ev.campeonato_id,
+      campeonato: ev.campeonato?.nombre || 'Sin campeonato',
       inscripciones: total.length,
       validadas: validas.length,
+      inscripciones_pagadas: inscripcionesPagadas.length,
+      pagos_pendientes: total.length - inscripcionesPagadas.length,
+      ingresos: ingreso,
+      ticket_promedio: inscripcionesPagadas.length ? ingreso / inscripcionesPagadas.length : 0,
+      ingresos_detalle: inscripcionesPagadas.map((i) => ({
+        inscripcion_id: i.id,
+        piloto: i.piloto?.usuario
+          ? `${i.piloto.usuario.nombre} ${i.piloto.usuario.apellido}`.trim()
+          : '—',
+        email: i.piloto?.usuario?.email || '—',
+        categoria: i.categoria?.nombre || '—',
+        estado: i.estado,
+        monto: Number(i.categoria?.precio_inscripcion || 0),
+        metodo_pago: i.pago?.metodo_pago || '—',
+        fecha_registro: i.fecha_registro,
+      })),
     };
   });
 
@@ -512,6 +552,7 @@ export async function getReporteResumen() {
     },
   });
 
+  const ingresosCalculados = ingresosPorCategoria.reduce((sum, ins) => sum + (ins.categoria?.precio_inscripcion || 0), 0);
   const ahora = new Date();
   return {
     kpis: {
@@ -519,9 +560,10 @@ export async function getReporteResumen() {
       eventos: eventos.length,
       proximos: eventos.filter((ev) => ev.fecha_inicio > ahora && ev.estado !== 'CANCELADO').length,
       sanciones,
-      ingresos: ingresos._sum?.monto || 0,
+      ingresos: ingresosCalculados,
     },
     inscripciones_por_evento: porEvento.sort((a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime()).slice(0, 12),
+    ingresos_por_evento: porEvento.sort((a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime()),
     marcas,
     crecimiento: crecimientoMensual.slice(-8),
     sanciones_recientes: sancionesRecientes.map((s) => ({

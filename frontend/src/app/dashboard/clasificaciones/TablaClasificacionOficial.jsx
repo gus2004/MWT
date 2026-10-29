@@ -54,8 +54,25 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+async function imageUrlToDataUrl(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`No se pudo cargar el logo (${response.status}).`);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("No se pudo convertir el logo para la exportación."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function displayValue(value) {
   return value == null || value === "" ? "-" : value;
+}
+
+function getEventLogo(campeonato, circuito, categoria) {
+  const eventText = `${campeonato} ${circuito} ${categoria}`.toLowerCase();
+  return eventText.includes("yamaha") ? "/Yamaha-Logо.png" : "/LOGO-ACMG.png";
 }
 
 export default function TablaClasificacionOficial({
@@ -103,7 +120,8 @@ export default function TablaClasificacionOficial({
           vuelta1,
           vuelta2,
           mejorMs,
-          mejorStr: formatMs(mejorMs),
+          mejorStr: mejorMs == null ? "NSP" : formatMs(mejorMs),
+          sinTiempo: mejorMs == null,
           puntos: fila.puntos ?? 0,
           esMejorV1: ms1 != null && ms1 === mejorMs,
           esMejorV2: ms2 != null && ms2 === mejorMs && ms1 !== mejorMs,
@@ -120,21 +138,7 @@ export default function TablaClasificacionOficial({
 
   const liderMs = normalizadas[0]?.mejorMs ?? null;
   const filasRender = useMemo(() => {
-    const visibles = normalizadas.slice(0, maxRows);
-    const vacias = Array.from({ length: Math.max(0, maxRows - visibles.length) }, (_, index) => ({
-      pos: visibles.length + index + 1,
-      dorsal: "",
-      nombre: "",
-      clase: "",
-      vuelta1: "",
-      vuelta2: "",
-      mejorMs: null,
-      mejorStr: "",
-      esMejorV1: false,
-      esMejorV2: false,
-      vacia: true,
-    }));
-    return [...visibles, ...vacias];
+    return normalizadas.slice(0, maxRows);
   }, [normalizadas, maxRows]);
 
   const exportarCSV = () => {
@@ -211,13 +215,32 @@ export default function TablaClasificacionOficial({
     XLSX.writeFile(workbook, `clasificacion_${String(categoria || "oficial").replace(/\s+/g, "_")}_f${valida}.xlsx`);
   };
 
-  const exportarPDF = () => {
+  const exportarPDF = async () => {
     if (!tablaRef.current) return;
 
-    const html = tablaRef.current.innerHTML;
+    const tabla = tablaRef.current.cloneNode(true);
+    tabla.querySelectorAll("tr.vacia").forEach((fila) => fila.remove());
     const ventana = window.open("", "printWindow");
     if (!ventana) return;
 
+    try {
+      const imagenes = Array.from(tabla.querySelectorAll("img"));
+      await Promise.all(imagenes.map(async (imagen) => {
+        const source = imagen.getAttribute("src");
+        if (!source) return;
+        const absoluteUrl = new URL(source, window.location.origin).href;
+        imagen.setAttribute("src", await imageUrlToDataUrl(absoluteUrl));
+      }));
+    } catch (error) {
+      ventana.close();
+      await notify({
+        title: "Exportación no disponible",
+        message: error.message || "No se pudieron cargar los logos para el PDF.",
+      });
+      return;
+    }
+
+    const html = tabla.innerHTML;
     ventana.document.write(`
       <!DOCTYPE html>
       <html lang="es">
@@ -264,7 +287,7 @@ export default function TablaClasificacionOficial({
     setTimeout(() => {
       ventana.print();
       ventana.close();
-    }, 400);
+    }, 800);
   };
 
   return (
@@ -296,7 +319,7 @@ export default function TablaClasificacionOficial({
             </div>
           </div>
           <div className="image-slot" style={{ justifySelf: "end" }}>
-            <Image src={logoDerechaUrl || "/LOGO.png"} alt="Imagen derecha" width={56} height={44} style={{ width: "auto", height: "auto" }} unoptimized />
+            <Image src={logoDerechaUrl || getEventLogo(campeonato, circuito, categoria)} alt="Logo del evento" width={56} height={44} style={{ width: "auto", height: "auto" }} unoptimized />
           </div>
         </div>
 
@@ -333,12 +356,12 @@ export default function TablaClasificacionOficial({
               filasRender.map((fila, index) => {
                 const esLider = index === 0;
                 return (
-                  <tr key={`${fila.pos}-${fila.dorsal}-${index}`} style={{ background: esLider ? "#fffde7" : index % 2 === 0 ? "#fff" : "#f8fafc" }}>
+                  <tr className={fila.vacia ? "vacia" : ""} key={`${fila.pos}-${fila.dorsal}-${index}`} style={{ background: esLider ? "#fffde7" : index % 2 === 0 ? "#fff" : "#f8fafc" }}>
                     <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.pos ?? index + 1}</td>
                     <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{displayValue(fila.dorsal)}</td>
                     <td className={fila.vacia ? "vacia" : "piloto"} style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: 600, color: fila.vacia ? "transparent" : "#254b4a" }}>{fila.nombre || ""}</td>
                     <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#254b4a" }}>{displayValue(fila.clase)}</td>
-                    {tipoTabla === "final" ? <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosHeat1}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosHeat2}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosTotal}</td></> : tipoTabla === "resultado" ? <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntos}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#254b4a" }}>{displayValue(fila.sancion)}</td></> : <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV1 ? "bold" : "normal", color: "#254b4a" }}>{displayValue(fila.vuelta1)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV2 ? "bold" : "normal", color: "#254b4a" }}>{displayValue(fila.vuelta2)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{displayValue(fila.mejorStr)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#595959" }}>{fila.mejorMs == null ? "-" : diffStr(fila.mejorMs, liderMs)}</td>{mostrarPuntos ? <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntos}</td> : null}</>}
+                    {tipoTabla === "final" ? <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosHeat1}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosHeat2}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntosTotal}</td></> : tipoTabla === "resultado" ? <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntos}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#254b4a" }}>{displayValue(fila.sancion)}</td></> : <><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV1 ? "bold" : "normal", color: "#254b4a" }}>{fila.sinTiempo ? "NSP" : displayValue(fila.vuelta1)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: fila.esMejorV2 ? "bold" : "normal", color: "#254b4a" }}>{fila.sinTiempo ? "NSP" : displayValue(fila.vuelta2)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{displayValue(fila.mejorStr)}</td><td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, color: "#595959" }}>{fila.sinTiempo ? "NSP" : diffStr(fila.mejorMs, liderMs)}</td>{mostrarPuntos ? <td style={{ padding: "3px 4px", textAlign: "center", border: "1px dotted #7f8c8d", fontSize: 12, fontWeight: "bold", color: "#254b4a" }}>{fila.puntos}</td> : null}</>}
                   </tr>
                 );
               })

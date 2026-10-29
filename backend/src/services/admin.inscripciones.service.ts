@@ -6,7 +6,7 @@ type CreateInscripcionInput = {
   evento_id?: string;
   piloto_id?: string;
   categoria_id?: string;
-  motocicleta_id?: string;
+  motocicleta_id?: string | null;
   estado?: EstadoInscripcion | string;
   dorsal_asignado?: number | string;
 };
@@ -66,7 +66,7 @@ export async function createInscripcionToDb(input: CreateInscripcionInput) {
   const evento = await resolveEvento(input.evento_id);
   const piloto = await resolvePiloto(input.piloto_id);
   const categoria = await resolveCategoria(input.categoria_id);
-  const motocicleta = await resolveMotocicleta(input.motocicleta_id);
+  const motocicleta = input.motocicleta_id ? await resolveMotocicleta(input.motocicleta_id) : null;
 
   if (!evento) throw new Error("Evento no encontrado");
 
@@ -79,23 +79,24 @@ export async function createInscripcionToDb(input: CreateInscripcionInput) {
   }
   if (!piloto) throw new Error("Piloto no encontrado");
   if (!categoria) throw new Error("Categoría no encontrada");
-  if (!motocicleta) throw new Error("Motocicleta no encontrada");
+  if (input.motocicleta_id && !motocicleta) throw new Error("Motocicleta no encontrada");
 
   if (categoria.campeonato_id !== evento.campeonato_id) {
     throw new Error("La categoría no pertenece al campeonato del evento seleccionado");
   }
 
-  if (motocicleta.piloto_id !== piloto.id) {
+  if (motocicleta && motocicleta.piloto_id !== piloto.id) {
     throw new Error("La motocicleta no pertenece al piloto seleccionado");
   }
 
-  const cilindradaMoto = Number(motocicleta.cilindrada_real);
+  const cilindradaMoto = motocicleta ? Number(motocicleta.cilindrada_real) : null;
   const cilindradaMin = categoria.cilindrada_min != null ? Number(categoria.cilindrada_min) : null;
   const cilindradaMax = categoria.cilindrada_max != null ? Number(categoria.cilindrada_max) : null;
 
-  if (Number.isFinite(cilindradaMoto)) {
-    const belowMin = cilindradaMin != null && Number.isFinite(cilindradaMin) && cilindradaMoto < cilindradaMin;
-    const aboveMax = cilindradaMax != null && Number.isFinite(cilindradaMax) && cilindradaMoto > cilindradaMax;
+  if (motocicleta && cilindradaMoto !== null && Number.isFinite(cilindradaMoto)) {
+    const motoCc = cilindradaMoto;
+    const belowMin = cilindradaMin != null && Number.isFinite(cilindradaMin) && motoCc < cilindradaMin;
+    const aboveMax = cilindradaMax != null && Number.isFinite(cilindradaMax) && motoCc > cilindradaMax;
     if (belowMin || aboveMax) {
       const rango =
         cilindradaMin != null && cilindradaMax != null
@@ -105,7 +106,7 @@ export async function createInscripcionToDb(input: CreateInscripcionInput) {
             : cilindradaMax != null
               ? `máximo ${cilindradaMax} cc`
               : "la cilindrada permitida";
-      throw new Error(`No puede ingresar a esta categoría porque la cilindrada de su moto (${cilindradaMoto} cc) no cumple el rango ${rango}.`);
+      throw new Error(`No puede ingresar a esta categoría porque la cilindrada de su moto (${motoCc} cc) no cumple el rango ${rango}.`);
     }
   }
 
@@ -164,15 +165,15 @@ export async function createInscripcionToDb(input: CreateInscripcionInput) {
       },
     });
 
-    const hasMotoLinked = await prisma.inscripcionMotocicleta.findFirst({
+    const hasMotoLinked = motocicleta ? await prisma.inscripcionMotocicleta.findFirst({
       where: {
         inscripcion_id: existing.id,
         motocicleta_id: motocicleta.id,
       },
       select: { id: true },
-    });
+    }) : null;
 
-    if (!hasMotoLinked) {
+    if (motocicleta && !hasMotoLinked) {
       await prisma.inscripcionMotocicleta.create({
         data: {
           inscripcion_id: updated.id,
@@ -189,19 +190,21 @@ export async function createInscripcionToDb(input: CreateInscripcionInput) {
       evento_id: evento.id,
       piloto_id: piloto.id,
       categoria_id: categoria.id,
-      motocicleta_id: motocicleta.id,
+      motocicleta_id: motocicleta?.id || null,
       estado,
       dorsal_asignado: dorsal,
     },
     include: inscripcionDetailInclude,
   });
 
-  await prisma.inscripcionMotocicleta.create({
-    data: {
-      inscripcion_id: created.id,
-      motocicleta_id: motocicleta.id,
-    },
-  });
+  if (motocicleta) {
+    await prisma.inscripcionMotocicleta.create({
+      data: {
+        inscripcion_id: created.id,
+        motocicleta_id: motocicleta.id,
+      },
+    });
+  }
 
   return prisma.inscripcion.findUnique({ where: { id: created.id }, include: inscripcionDetailInclude });
 }

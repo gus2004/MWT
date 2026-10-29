@@ -29,6 +29,12 @@ function stateBadge(estado) {
 
 export default function InscripcionesReportes({ inscripciones = [], eventGroups = [] }) {
   const [filters, setFilters] = useState({ evento: "", categoria: "", estado: "", query: "" });
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const updateFilters = (updater) => {
+    setFilters(updater);
+    setPage(1);
+  };
 
   const categoriaOptions = useMemo(() => {
     const seen = new Map();
@@ -53,6 +59,13 @@ export default function InscripcionesReportes({ inscripciones = [], eventGroups 
       return matchesQuery && matchesEvento && matchesCategoria && matchesEstado;
     });
   }, [inscripciones, filters]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = useMemo(
+    () => filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
+    [filtered, currentPage, itemsPerPage],
+  );
 
   const counts = useMemo(() => {
     const total = filtered.length;
@@ -162,7 +175,10 @@ export default function InscripcionesReportes({ inscripciones = [], eventGroups 
     setTimeout(() => ventana.print(), 400);
   };
 
-  const resetFilters = () => setFilters({ evento: "", categoria: "", estado: "", query: "" });
+  const resetFilters = () => {
+    setFilters({ evento: "", categoria: "", estado: "", query: "" });
+    setPage(1);
+  };
 
   return (
     <section className={styles.analyticsShell}>
@@ -174,13 +190,13 @@ export default function InscripcionesReportes({ inscripciones = [], eventGroups 
       </div>
 
       <div className={styles.analyticsFilters}>
-        <input className={styles.input} type="search" placeholder="Buscar piloto, evento, dorsal..." value={filters.query} onChange={(e) => setFilters((c) => ({ ...c, query: e.target.value }))} />
-        <SearchSelect clearable groups={eventGroups} value={filters.evento || ""} onChange={(v) => setFilters((c) => ({ ...c, evento: v, ...(v !== c.evento ? { categoria: "" } : {}) }))} placeholder="Todos los eventos" searchPlaceholder="Buscar evento o campeonato..." className="w-full" inputClassName={styles.input} />
-        <select className={styles.input} value={filters.categoria} onChange={(e) => setFilters((c) => ({ ...c, categoria: e.target.value }))}>
+        <input className={styles.input} type="search" placeholder="Buscar piloto, evento, dorsal..." value={filters.query} onChange={(e) => updateFilters((c) => ({ ...c, query: e.target.value }))} />
+        <SearchSelect clearable groups={eventGroups} value={filters.evento || ""} onChange={(v) => updateFilters((c) => ({ ...c, evento: v, ...(v !== c.evento ? { categoria: "" } : {}) }))} placeholder="Todos los eventos" searchPlaceholder="Buscar evento o campeonato..." className="w-full" inputClassName={styles.input} />
+        <select className={styles.input} value={filters.categoria} onChange={(e) => updateFilters((c) => ({ ...c, categoria: e.target.value }))}>
           <option value="">Todas las categorías</option>
           {categoriaOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
-        <select className={styles.input} value={filters.estado} onChange={(e) => setFilters((c) => ({ ...c, estado: e.target.value }))}>
+        <select className={styles.input} value={filters.estado} onChange={(e) => updateFilters((c) => ({ ...c, estado: e.target.value }))}>
           <option value="">Todos los estados</option>
           {Object.entries(STATE_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
@@ -236,6 +252,51 @@ export default function InscripcionesReportes({ inscripciones = [], eventGroups 
             <p className={styles.sectionText}>Detalle de las {filtered.length} inscripciones que coinciden con el filtro.</p>
           </div>
         </div>
+        {filtered.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13 }}>
+              Mostrar
+              <select
+                className={styles.input}
+                style={{ width: 76, padding: "6px 8px", fontSize: 13 }}
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+              >
+                {[5, 10, 20, 50].map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+              por página
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                type="button"
+                className={styles.secondaryBtn}
+                style={{ padding: "7px 12px", opacity: currentPage === 1 ? 0.5 : 1 }}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={currentPage === 1}
+              >
+                Anterior
+              </button>
+              <span style={{ color: "var(--text-muted)", fontSize: 13, minWidth: 105, textAlign: "center" }}>
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                style={{ padding: "7px 12px", opacity: currentPage === totalPages ? 0.5 : 1 }}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Siguiente
+              </button>
+            </div>
+            <span style={{ color: "var(--text-muted)", fontSize: 13 }}>
+              {filtered.length} resultados
+            </span>
+          </div>
+        )}
         <div className={styles.tableWrapper}>
           {filtered.length === 0 ? (
             <div className={styles.emptyState}>No hay inscripciones que coincidan con los filtros.</div>
@@ -243,7 +304,7 @@ export default function InscripcionesReportes({ inscripciones = [], eventGroups 
             <table className={styles.table}>
               <thead><tr><th>Piloto</th><th>Evento</th><th>Categoría</th><th>Dorsal</th><th>Estado</th><th>Fecha</th></tr></thead>
               <tbody>
-                {filtered.map((item) => (
+                {paginated.map((item) => (
                   <tr key={item.id}>
                     <td>
                       <strong>{`${item.piloto?.usuario?.nombre || ""} ${item.piloto?.usuario?.apellido || ""}`.trim()}</strong>

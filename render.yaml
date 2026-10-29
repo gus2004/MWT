@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: mwt-backend
+    runtime: node
+    rootDir: backend
+    region: oregon
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mwt-postgres
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+
+databases:
+  - name: mwt-postgres
+    region: oregon
+    databaseName: mwt_db
+    user: mwtuser
+

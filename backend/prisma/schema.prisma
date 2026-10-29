@@ -303,14 +303,14 @@ model Inscripcion {
   evento_id        String
   piloto_id        String
   categoria_id     String
-  motocicleta_id   String
+  motocicleta_id   String?
   fecha_registro   DateTime          @default(now())
   estado           EstadoInscripcion @default(PENDIENTE)
   dorsal_asignado  Int
   evento           Evento            @relation(fields: [evento_id], references: [id])
   piloto           PerfilPiloto      @relation(fields: [piloto_id], references: [id])
   categoria        Categoria         @relation(fields: [categoria_id], references: [id])
-  motocicleta      Motocicleta       @relation(fields: [motocicleta_id], references: [id])
+  motocicleta      Motocicleta?      @relation(fields: [motocicleta_id], references: [id])
   pago             Pago?
   revision_tecnica RevisionTecnica?
   sanciones        Sancion[]

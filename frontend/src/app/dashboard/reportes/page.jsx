@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BarChart2, CalendarClock, Download, FileSpreadsheet, FileText, Gavel, TrendingUp, Users, Flag, Wallet, Shield, RefreshCw } from "lucide-react";
-import { Badge, Btn, Card, Empty, Kpi, Field, selectCls } from "@/components/kit";
+import * as XLSX from "xlsx";
+import { Badge, Btn, Card, Empty, Kpi, Field, Modal, selectCls } from "@/components/kit";
 import { soporteApi } from "@/lib/soporteApi";
 
 const EST_BADGE = {
@@ -29,8 +30,15 @@ export default function ReportesPage() {
   const [rango, setRango] = useState("90"); // días: 30 | 90 | 365
   const [expCSV, setExpCSV] = useState(false);
   const [expPDF, setExpPDF] = useState(false);
+  const [expExcel, setExpExcel] = useState(false);
   const [aviso, setAviso] = useState("");
   const [stamp, setStamp] = useState(null);
+  const [ingresoFiltro, setIngresoFiltro] = useState({ query: "", campeonato: "", estado: "", desde: "", hasta: "", orden: "fecha_desc" });
+  const [ingresoPagina, setIngresoPagina] = useState(1);
+  const [ingresoDetalle, setIngresoDetalle] = useState(null);
+  const [detallePagina, setDetallePagina] = useState(1);
+  const ingresosPorPagina = 8;
+  const detallesPorPagina = 10;
 
   const cargar = async () => {
     setLoading(true);
@@ -61,6 +69,49 @@ export default function ReportesPage() {
     return (data.sanciones_recientes || []).filter((s) => new Date(s.fecha) >= limite);
   }, [data, rango]);
 
+  const campeonatosIngresos = useMemo(() => {
+    const items = (data?.ingresos_por_evento || []).map((e) => [e.campeonato_id, e.campeonato]).filter(([id]) => id);
+    return Array.from(new Map(items).entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [data]);
+
+  const ingresosFiltrados = useMemo(() => {
+    const query = ingresoFiltro.query.trim().toLowerCase();
+    const desde = ingresoFiltro.desde ? new Date(`${ingresoFiltro.desde}T00:00:00`) : null;
+    const hasta = ingresoFiltro.hasta ? new Date(`${ingresoFiltro.hasta}T23:59:59`) : null;
+    const rows = (data?.ingresos_por_evento || []).filter((e) => {
+      const fecha = new Date(e.fecha_inicio);
+      const texto = `${e.evento} ${e.campeonato}`.toLowerCase();
+      return (!query || texto.includes(query))
+        && (!ingresoFiltro.campeonato || e.campeonato_id === ingresoFiltro.campeonato)
+        && (!ingresoFiltro.estado || e.estado === ingresoFiltro.estado)
+        && (!desde || fecha >= desde)
+        && (!hasta || fecha <= hasta);
+    });
+    return rows.sort((a, b) => {
+      if (ingresoFiltro.orden === "ingreso_desc") return (b.ingresos || 0) - (a.ingresos || 0);
+      if (ingresoFiltro.orden === "ingreso_asc") return (a.ingresos || 0) - (b.ingresos || 0);
+      if (ingresoFiltro.orden === "evento_asc") return a.evento.localeCompare(b.evento);
+      return new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime();
+    });
+  }, [data, ingresoFiltro]);
+
+  const ingresosTotalPaginas = Math.max(1, Math.ceil(ingresosFiltrados.length / ingresosPorPagina));
+  const ingresosPaginaActual = Math.min(ingresoPagina, ingresosTotalPaginas);
+  const ingresosVisibles = ingresosFiltrados.slice((ingresosPaginaActual - 1) * ingresosPorPagina, ingresosPaginaActual * ingresosPorPagina);
+  const ingresosFiltradosTotal = ingresosFiltrados.reduce((sum, e) => sum + Number(e.ingresos || 0), 0);
+  const ingresosConfirmados = (data?.ingresos_por_evento || []).reduce((sum, e) => sum + Number(e.ingresos || 0), 0);
+  const actualizarIngresoFiltro = (patch) => {
+    setIngresoFiltro((current) => ({ ...current, ...patch }));
+    setIngresoPagina(1);
+  };
+  const dinero = (value) => `Q${Number(value || 0).toLocaleString("es-GT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const detalleTotalPaginas = Math.max(1, Math.ceil((ingresoDetalle?.ingresos_detalle?.length || 0) / detallesPorPagina));
+  const detallePaginaActual = Math.min(detallePagina, detalleTotalPaginas);
+  const detallesVisibles = (ingresoDetalle?.ingresos_detalle || []).slice(
+    (detallePaginaActual - 1) * detallesPorPagina,
+    detallePaginaActual * detallesPorPagina,
+  );
+
   const copiaAviso = (msg) => {
     setAviso(msg);
     setTimeout(() => setAviso(""), 3500);
@@ -72,6 +123,11 @@ export default function ReportesPage() {
       title: "Inscripciones por evento",
       head: ["Evento", "Fecha", "Estado", "Inscripciones", "Validadas"],
       rows: (data.inscripciones_por_evento || []).map((e) => [e.evento, fechaHora(e.fecha_inicio), e.estado, e.inscripciones || 0, e.validadas || 0]),
+    };
+    if (tipo === "ingresos") return {
+      title: "Ingresos por evento",
+      head: ["Evento", "Campeonato", "Fecha", "Inscripciones pagadas", "Pendientes", "Ingreso (Q)", "Ticket promedio (Q)"],
+      rows: ingresosFiltrados.map((e) => [e.evento, e.campeonato, fechaHora(e.fecha_inicio), e.inscripciones_pagadas || 0, e.pagos_pendientes || 0, Number(e.ingresos || 0).toFixed(2), Number(e.ticket_promedio || 0).toFixed(2)]),
     };
     if (tipo === "marcas") return {
       title: "Participación por marca",
@@ -109,6 +165,31 @@ export default function ReportesPage() {
     URL.revokeObjectURL(a.href);
     setExpCSV(true); setTimeout(() => setExpCSV(false), 2000);
     copiaAviso(`CSV generado: "${title}" (${rows.length} fila(s)).`);
+  };
+
+  const exportarExcel = () => {
+    const { title, head, rows } = dataDelTipo();
+    if (!rows.length) {
+      copiaAviso("No hay datos para exportar con los filtros seleccionados.");
+      return;
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["MWT MOTORSPORT · SISTEMA DE GESTIÓN DEPORTIVA"],
+      [`REPORTE: ${title}`],
+      [`Generado: ${fechaHora(new Date())}`],
+      [""],
+      head,
+      ...rows,
+    ]);
+    worksheet["!cols"] = head.map((header, index) => ({
+      wch: Math.min(42, Math.max(String(header).length + 2, ...rows.map((row) => String(row[index] ?? "").length + 2))),
+    }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte");
+    XLSX.writeFile(workbook, `Reporte_${tipo}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setExpExcel(true); setTimeout(() => setExpExcel(false), 2000);
+    copiaAviso(`Excel generado: "${title}" (${rows.length} fila(s)).`);
   };
 
   const exportarPDF = () => {
@@ -183,7 +264,7 @@ export default function ReportesPage() {
     copiaAviso(`PDF de "${title}" enviado a impresión (Guardar como para descargarlo).`);
   };
 
-  const TITULOS = { inscripciones: "Inscripciones por evento", marcas: "Participación por marca", sanciones: "Sanciones del comisariato", crecimiento: "Crecimiento de participantes" };
+  const TITULOS = { inscripciones: "Inscripciones por evento", ingresos: "Ingresos por evento", marcas: "Participación por marca", sanciones: "Sanciones del comisariato", crecimiento: "Crecimiento de participantes" };
 
   return (
     <main className="p-6 lg:p-8 space-y-6">
@@ -202,7 +283,8 @@ export default function ReportesPage() {
           </div>
           <div className="flex gap-2">
             <Btn variant="secondary" onClick={cargar} disabled={loading}><RefreshCw size={13} /> Actualizar</Btn>
-            <Btn variant="gradient" onClick={exportarCSV} disabled={!data || expCSV}><FileSpreadsheet size={13} /> {expCSV ? "..." : "Exportar CSV"}</Btn>
+            <Btn variant="gradient" onClick={exportarCSV} disabled={!data || expCSV}><Download size={13} /> {expCSV ? "..." : "Exportar CSV"}</Btn>
+            <Btn variant="secondary" onClick={exportarExcel} disabled={!data || expExcel}><FileSpreadsheet size={13} /> {expExcel ? "..." : "Exportar Excel"}</Btn>
             <Btn variant="secondary" onClick={exportarPDF} disabled={!data || expPDF}><FileText size={13} /> {expPDF ? "..." : "Imprimir PDF"}</Btn>
           </div>
         </div>
@@ -307,6 +389,156 @@ export default function ReportesPage() {
             </Card>
           </div>
 
+          <Card
+            title="Ingresos por evento"
+            sub="Pagos confirmados agrupados por fecha; los filtros se combinan para encontrar rápidamente un evento."
+            actions={<Badge variant="success"><Wallet size={10} /> {dinero(ingresosConfirmados)} confirmados</Badge>}
+          >
+            <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mb-4">
+              <input
+                className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-blue-400/60"
+                placeholder="Buscar evento..."
+                value={ingresoFiltro.query}
+                onChange={(e) => actualizarIngresoFiltro({ query: e.target.value })}
+              />
+              <select className={selectCls} value={ingresoFiltro.campeonato} onChange={(e) => actualizarIngresoFiltro({ campeonato: e.target.value })}>
+                <option value="">Todos los campeonatos</option>
+                {campeonatosIngresos.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+              </select>
+              <select className={selectCls} value={ingresoFiltro.estado} onChange={(e) => actualizarIngresoFiltro({ estado: e.target.value })}>
+                <option value="">Todos los estados</option>
+                {Object.entries(EST_BADGE).map(([id, [, label]]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+              <input type="date" className={selectCls} aria-label="Fecha desde" value={ingresoFiltro.desde} onChange={(e) => actualizarIngresoFiltro({ desde: e.target.value })} />
+              <input type="date" className={selectCls} aria-label="Fecha hasta" value={ingresoFiltro.hasta} onChange={(e) => actualizarIngresoFiltro({ hasta: e.target.value })} />
+              <select className={selectCls} value={ingresoFiltro.orden} onChange={(e) => actualizarIngresoFiltro({ orden: e.target.value })}>
+                <option value="fecha_desc">Más recientes</option>
+                <option value="ingreso_desc">Mayor ingreso</option>
+                <option value="ingreso_asc">Menor ingreso</option>
+                <option value="evento_asc">Evento A-Z</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+              <div className="rounded-[10px] bg-emerald-500/10 p-3"><div className="text-[9px] uppercase tracking-widest text-slate-500">Filtrado</div><div className="text-lg font-black text-emerald-600">{dinero(ingresosFiltradosTotal)}</div></div>
+              <div className="rounded-[10px] bg-blue-500/10 p-3"><div className="text-[9px] uppercase tracking-widest text-slate-500">Eventos</div><div className="text-lg font-black text-blue-600">{ingresosFiltrados.length}</div></div>
+              <div className="rounded-[10px] bg-violet-500/10 p-3"><div className="text-[9px] uppercase tracking-widest text-slate-500">Inscripciones pagadas</div><div className="text-lg font-black text-violet-600">{ingresosFiltrados.reduce((sum, e) => sum + (e.inscripciones_pagadas || 0), 0)}</div></div>
+              <div className="rounded-[10px] bg-amber-500/10 p-3"><div className="text-[9px] uppercase tracking-widest text-slate-500">Pendientes</div><div className="text-lg font-black text-amber-600">{ingresosFiltrados.reduce((sum, e) => sum + (e.pagos_pendientes || 0), 0)}</div></div>
+            </div>
+
+            {ingresosVisibles.length === 0 ? (
+              <Empty title="Sin ingresos para los filtros seleccionados" sub="Prueba con otro campeonato, estado o rango de fechas." />
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="text-[9px] uppercase tracking-widest text-slate-400 border-b border-border">
+                        <th className="text-left py-2 pr-3">Evento</th>
+                        <th className="text-left py-2 pr-3">Campeonato</th>
+                        <th className="text-left py-2 pr-3">Fecha</th>
+                        <th className="text-right py-2 pr-3">Pagadas</th>
+                        <th className="text-right py-2 pr-3">Pendientes</th>
+                        <th className="text-right py-2 pr-3">Ingreso</th>
+                        <th className="text-right py-2">Promedio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ingresosVisibles.map((e, i) => {
+                        const [variant, label] = EST_BADGE[e.estado] || EST_BADGE.BORRADOR;
+                        return (
+                          <tr key={e.evento_id} className={i % 2 === 0 ? "bg-card" : "bg-[#EDF4FF]/60"}>
+                            <td className="py-2 pr-3 font-bold text-foreground">
+                              <button
+                                type="button"
+                                className="text-left text-blue-600 hover:text-blue-800 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                disabled={!e.ingresos}
+                                onClick={() => { setIngresoDetalle(e); setDetallePagina(1); }}
+                                title={e.ingresos ? "Ver desglose de ingresos" : "Este evento no tiene ingresos"}
+                              >
+                                {e.evento}
+                              </button>
+                              <div className="mt-0.5"><Badge variant={variant}>{label}</Badge></div>
+                            </td>
+                            <td className="py-2 pr-3 text-slate-500">{e.campeonato}</td>
+                            <td className="py-2 pr-3 text-slate-500 whitespace-nowrap">{fechaHora(e.fecha_inicio).split(",")[0]}</td>
+                            <td className="py-2 pr-3 text-right text-violet-600 font-bold">{e.inscripciones_pagadas}</td>
+                            <td className="py-2 pr-3 text-right text-amber-600">{e.pagos_pendientes}</td>
+                            <td className="py-2 pr-3 text-right text-emerald-600 font-black">{dinero(e.ingresos)}</td>
+                            <td className="py-2 text-right text-slate-500">{dinero(e.ticket_promedio)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {ingresosTotalPaginas > 1 ? (
+                  <div className="flex items-center justify-between gap-3 mt-4 text-[10px] text-slate-500">
+                    <span>Mostrando {(ingresosPaginaActual - 1) * ingresosPorPagina + 1}–{Math.min(ingresosPaginaActual * ingresosPorPagina, ingresosFiltrados.length)} de {ingresosFiltrados.length}</span>
+                    <div className="flex items-center gap-1">
+                      <Btn variant="secondary" sm disabled={ingresosPaginaActual === 1} onClick={() => setIngresoPagina((p) => Math.max(1, p - 1))}>Anterior</Btn>
+                      <span className="px-2 font-bold">Página {ingresosPaginaActual} de {ingresosTotalPaginas}</span>
+                      <Btn variant="secondary" sm disabled={ingresosPaginaActual === ingresosTotalPaginas} onClick={() => setIngresoPagina((p) => Math.min(ingresosTotalPaginas, p + 1))}>Siguiente</Btn>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </Card>
+
+          <Modal
+            open={Boolean(ingresoDetalle)}
+            onClose={() => setIngresoDetalle(null)}
+            title={ingresoDetalle ? `Desglose de ingresos · ${ingresoDetalle.evento}` : "Desglose de ingresos"}
+            sub={ingresoDetalle ? `${ingresoDetalle.campeonato} · ${ingresoDetalle.inscripciones_pagadas} inscripción(es) pagada(s) · ${dinero(ingresoDetalle.ingresos)}` : ""}
+            size="xl"
+          >
+            {!ingresoDetalle?.ingresos_detalle?.length ? (
+              <Empty title="Sin detalle de ingresos" />
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="text-[9px] uppercase tracking-widest text-slate-400 border-b border-border">
+                        <th className="text-left py-2 pr-3">Piloto</th>
+                        <th className="text-left py-2 pr-3">Correo</th>
+                        <th className="text-left py-2 pr-3">Categoría</th>
+                        <th className="text-left py-2 pr-3">Estado</th>
+                        <th className="text-left py-2 pr-3">Método</th>
+                        <th className="text-left py-2 pr-3">Registro</th>
+                        <th className="text-right py-2">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detallesVisibles.map((detalle, index) => (
+                        <tr key={detalle.inscripcion_id} className={index % 2 === 0 ? "bg-card" : "bg-[#EDF4FF]/60"}>
+                          <td className="py-2 pr-3 font-bold text-foreground">{detalle.piloto}</td>
+                          <td className="py-2 pr-3 text-slate-500">{detalle.email}</td>
+                          <td className="py-2 pr-3 text-slate-500">{detalle.categoria}</td>
+                          <td className="py-2 pr-3"><Badge variant={detalle.estado === "VALIDADA" ? "success" : "blue"}>{detalle.estado}</Badge></td>
+                          <td className="py-2 pr-3 text-slate-500">{detalle.metodo_pago}</td>
+                          <td className="py-2 pr-3 text-slate-500 whitespace-nowrap">{fechaHora(detalle.fecha_registro)}</td>
+                          <td className="py-2 text-right font-black text-emerald-600">{dinero(detalle.monto)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {detalleTotalPaginas > 1 ? (
+                  <div className="flex items-center justify-between gap-3 mt-4 text-[10px] text-slate-500">
+                    <span>Mostrando {(detallePaginaActual - 1) * detallesPorPagina + 1}–{Math.min(detallePaginaActual * detallesPorPagina, ingresoDetalle.ingresos_detalle.length)} de {ingresoDetalle.ingresos_detalle.length}</span>
+                    <div className="flex items-center gap-1">
+                      <Btn variant="secondary" sm disabled={detallePaginaActual === 1} onClick={() => setDetallePagina((page) => Math.max(1, page - 1))}>Anterior</Btn>
+                      <span className="px-2 font-bold">Página {detallePaginaActual} de {detalleTotalPaginas}</span>
+                      <Btn variant="secondary" sm disabled={detallePaginaActual === detalleTotalPaginas} onClick={() => setDetallePagina((page) => Math.min(detalleTotalPaginas, page + 1))}>Siguiente</Btn>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </Modal>
+
           {/* SANCIONES RECIENTES (tabla profesional siempre visible) */}
           <Card
             title="Sanciones del comisariato"
@@ -357,6 +589,7 @@ export default function ReportesPage() {
               <Field label="Tipo de reporte">
                 <select className={selectCls} value={tipo} onChange={(e) => setTipo(e.target.value)}>
                   <option value="inscripciones">Inscripciones por evento</option>
+                  <option value="ingresos">Ingresos por evento</option>
                   <option value="marcas">Participación por marca</option>
                   <option value="sanciones">Sanciones del comisariato</option>
                   <option value="crecimiento">Crecimiento de participantes</option>
@@ -372,6 +605,9 @@ export default function ReportesPage() {
               <div className="flex gap-2">
                 <Btn variant="gradient" onClick={exportarCSV} disabled={!data || expCSV} title="Descarga CSV compatible con Excel (UTF-8 con BOM)">
                   <Download size={13} /> {expCSV ? "Exportado" : "CSV"}
+                </Btn>
+                <Btn variant="secondary" onClick={exportarExcel} disabled={!data || expExcel} title="Descarga un libro Excel (.xlsx) con los datos filtrados">
+                  <FileSpreadsheet size={13} /> {expExcel ? "Exportado" : "Excel"}
                 </Btn>
                 <Btn variant="secondary" onClick={exportarPDF} disabled={!data || expPDF} title="Vista de impresión con banda MWT, KPIs y firmas">
                   <FileText size={13} /> {expPDF ? "Enviado" : "Imprimir PDF"}

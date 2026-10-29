@@ -59,6 +59,16 @@ async function upsertEventoToDb(data: any, estado: string, visiblePortada: boole
   const existingById = eventoId
     ? await prisma.evento.findUnique({ where: { id: eventoId } })
     : null;
+
+  if (existingById && existingById.campeonato_id !== campeonato.id) {
+    const inscripciones = await prisma.inscripcion.count({ where: { evento_id: existingById.id } });
+    if (inscripciones > 0) {
+      throw new Error(
+        'No se puede cambiar el campeonato de una fecha con inscripciones. Edite la fecha con su campeonato actual para conservarlas.'
+      );
+    }
+  }
+
   const payload = {
     campeonato_id: campeonato.id,
     circuito_id: circuito.id,

@@ -421,15 +421,15 @@ export default function Inscripciones() {
     setSaving(true);
     setMessage("");
     try {
-      if (!draft.evento_id || !draft.categoria_id || !draft.piloto_id || !draft.motocicleta_id || !draft.dorsal_asignado) {
-        throw new Error("Completa evento, categoría, piloto, moto y dorsal.");
+      if (!draft.evento_id || !draft.categoria_id || !draft.piloto_id || !draft.dorsal_asignado) {
+        throw new Error("Completa evento, categoría, piloto y dorsal.");
       }
 
       const created = await createInscripcion({
         evento_id: draft.evento_id,
         piloto_id: draft.piloto_id,
         categoria_id: draft.categoria_id,
-        motocicleta_id: draft.motocicleta_id,
+        motocicleta_id: draft.motocicleta_id || undefined,
         dorsal_asignado: Number(draft.dorsal_asignado),
         estado: draft.estado,
       });
@@ -446,7 +446,7 @@ export default function Inscripciones() {
         categoria: categoria ? `${categoria.nombre || ""}${categoria.cilindrada_min || categoria.cilindrada_max ? ` (${categoria.cilindrada_min}-${categoria.cilindrada_max} cc)` : ""}` : "—",
         piloto: piloto ? `${piloto.nombre || ""} ${piloto.apellido || ""}`.trim() : "—",
         email: piloto?.email || "—",
-        moto: moto ? `${moto.marca_nombre ? `${moto.marca_nombre} ` : ""}${moto.modelo || ""}${moto.apodo_moto ? ` (${moto.apodo_moto})` : ""}` : "—",
+        moto: moto ? `${moto.marca_nombre ? `${moto.marca_nombre} ` : ""}${moto.modelo || ""}${moto.apodo_moto ? ` (${moto.apodo_moto})` : ""}` : "No asignada",
         anio: moto?.anio || "—",
         cilindrada: moto?.cilindrada_real || moto?.cilindrada || "—",
         dorsal: draft.dorsal_asignado || "—",
@@ -637,7 +637,7 @@ export default function Inscripciones() {
             <div className={styles.statsGrid}>{stats.map((item) => <InfoCard key={item.label} label={item.label} value={item.value} />)}</div>
 
             <section className={styles.cardSection} style={{ marginBottom: 18 }}>
-              <div className={styles.sectionHeader}><div><h2 className={styles.sectionTitle}>Agregar inscripción</h2><p className={styles.sectionText}>Selecciona un evento, categoría, piloto, moto y dorsal.</p></div><span className={styles.statusBadge}>Alta</span></div>
+              <div className={styles.sectionHeader}><div><h2 className={styles.sectionTitle}>Agregar inscripción</h2><p className={styles.sectionText}>Selecciona un evento, categoría, piloto y dorsal. La motocicleta es opcional.</p></div><span className={styles.statusBadge}>Alta</span></div>
               {!optionsLoading && optionsByEvent.length === 0 ? (
                 <p className={styles.fieldHint} style={{ color: "#dc2626", fontWeight: 700 }}>
                   No hay eventos mostrados en el módulo de Eventos. Las inscripciones se habilitan automáticamente cuando una fecha se muestra en portada del módulo de Eventos.
@@ -658,9 +658,9 @@ export default function Inscripciones() {
                   };
                 })} value={draft.piloto_id || ""} onChange={(v) => setField("piloto_id", v)} placeholder="Seleccione un piloto existente" searchPlaceholder="Buscar por nombre..." className="w-full" /><div style={{ marginTop: 8 }}><button type="button" onClick={goToCrearPiloto} style={{ background: "#0ea5a4", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontWeight: 700, minHeight: 40 }}>+ Agregar piloto nuevo</button></div></label>
                 <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Motocicleta</span>
-                  <select className={styles.input} value={draft.motocicleta_id} onChange={(e) => setField("motocicleta_id", e.target.value)} required disabled={!draft.piloto_id}>
-                    <option value="">{draft.piloto_id ? "Seleccione una motocicleta" : "Primero seleccione un piloto"}</option>
+                  <span className={styles.fieldLabel}>Motocicleta <span style={{ fontWeight: 400 }}>(opcional)</span></span>
+                  <select className={styles.input} value={draft.motocicleta_id} onChange={(e) => setField("motocicleta_id", e.target.value)} disabled={!draft.piloto_id}>
+                    <option value="">{draft.piloto_id ? "Sin motocicleta" : "Primero seleccione un piloto"}</option>
                     {optionsByMoto.filter((moto) => String(moto.piloto_id) === String(draft.piloto_id)).map((motocicleta) => <option key={motocicleta.id} value={motocicleta.id}>{motocicleta.modelo} {motocicleta.apodo_moto ? `- ${motocicleta.apodo_moto}` : ""} {motocicleta.marca_nombre || motocicleta.anio ? `(${[motocicleta.marca_nombre, motocicleta.anio].filter(Boolean).join(", ")})` : ""}</option>)}
                   </select>
                   <div style={{ marginTop: 8 }}>
@@ -693,7 +693,7 @@ export default function Inscripciones() {
                 </label>
                 <label className={styles.field}><span className={styles.fieldLabel}>Estado</span><select className={styles.input} value={draft.estado} onChange={(e) => setField("estado", e.target.value)}><option value="PENDIENTE">Pendiente</option><option value="PAGADA">Pagada</option><option value="VALIDADA">Validada</option><option value="RECHAZADA">Rechazada</option></select></label>
 
-                <div className={styles.formActions} style={{ gridColumn: "1 / -1" }}>{message ? <span className={styles.fieldHint}>{message}</span> : null}<button type="submit" className={styles.primaryBtn} disabled={saving || !draft.evento_id || !draft.categoria_id || !draft.piloto_id || !draft.motocicleta_id || !draft.dorsal_asignado}>{saving ? "Guardando..." : "Guardar inscripción"}</button></div>
+                <div className={styles.formActions} style={{ gridColumn: "1 / -1" }}>{message ? <span className={styles.fieldHint}>{message}</span> : null}<button type="submit" className={styles.primaryBtn} disabled={saving || !draft.evento_id || !draft.categoria_id || !draft.piloto_id || !draft.dorsal_asignado}>{saving ? "Guardando..." : "Guardar inscripción"}</button></div>
               </form>
             </section>
 

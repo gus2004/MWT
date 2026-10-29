@@ -5,8 +5,8 @@ export async function createInscripcionController(req: Request, res: Response) {
   try {
     const payload = req.body || {};
 
-    if (!payload.evento_id || !payload.piloto_id || !payload.categoria_id || !payload.motocicleta_id) {
-      return res.status(400).json({ message: 'Faltan campos requeridos: evento_id, piloto_id, categoria_id, motocicleta_id' });
+    if (!payload.evento_id || !payload.piloto_id || !payload.categoria_id) {
+      return res.status(400).json({ message: 'Faltan campos requeridos: evento_id, piloto_id, categoria_id' });
     }
 
     const result = await createInscripcionToDb(payload);

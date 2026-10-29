@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import * as soporteService from '../services/soporte.service';
 import * as reportService from '../services/comisariato-report.service';
 import * as reglamentoPdfService from '../services/reglamento-pdf.service';
-import { calificarIncidencia, alertasRiesgo } from '../services/ia.service';
+import { calificarIncidencia, alertasRiesgo, obtenerUsoIA } from '../services/ia.service';
 import { tipoEvidencia } from '../middlewares/upload.middleware';
 
 // ── Asistente IA del comisariato ─────────────────────────────
@@ -24,6 +24,15 @@ export async function iaAlertasRiesgo(_req: Request, res: Response) {
     return res.status(200).json({ items });
   } catch (error: any) {
     return res.status(500).json({ message: error.message || 'Error calculando alertas de riesgo.' });
+  }
+}
+
+export async function iaUsoPorcentaje(_req: Request, res: Response) {
+  try {
+    const data = await obtenerUsoIA();
+    return res.status(200).json(data);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Error obteniendo el uso de IA.' });
   }
 }
 

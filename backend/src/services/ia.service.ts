@@ -364,7 +364,58 @@ export async function calificarIncidencia(input: IncidenciaInput): Promise<Calif
   }
 
   const conLLM = await calificarConLLM(input, reglamento as ReglamentoArticulo[], extractoPdf);
-  return conLLM || calificarLocal(input, reglamento as ReglamentoArticulo[]);
+  const resultado = conLLM || calificarLocal(input, reglamento as ReglamentoArticulo[]);
+
+  // ── Registrar uso de IA (para el porcentaje en el módulo de Comisario) ──
+  await registrarUsoIA(resultado.fuente);
+
+  return resultado;
+}
+
+// ── Contadores de uso de IA (almacenados en PreferenciaSistema) ───────────
+
+export async function registrarUsoIA(fuente: FuenteIA) {
+  const totalKey = 'ia_uso_total';
+  const iaKey = 'ia_uso_ia';
+  const localKey = 'ia_uso_local';
+
+  const [totalPref, iaPref, localPref] = await Promise.all([
+    prisma.preferenciaSistema.findUnique({ where: { clave: totalKey } }),
+    prisma.preferenciaSistema.findUnique({ where: { clave: iaKey } }),
+    prisma.preferenciaSistema.findUnique({ where: { clave: localKey } }),
+  ]);
+
+  const totalActual = totalPref ? parseInt(totalPref.valor, 10) : 0;
+  const iaActual = iaPref ? parseInt(iaPref.valor, 10) : 0;
+  const localActual = localPref ? parseInt(localPref.valor, 10) : 0;
+
+  await Promise.all([
+    prisma.preferenciaSistema.upsert({
+      where: { clave: totalKey },
+      update: { valor: String(totalActual + 1) },
+      create: { clave: totalKey, valor: String(totalActual + 1), descripcion: 'Total de usos del asistente IA del comisariato' },
+    }),
+    prisma.preferenciaSistema.upsert({
+      where: { clave: fuente === 'ia' ? iaKey : localKey },
+      update: { valor: String((fuente === 'ia' ? iaActual : localActual) + 1) },
+      create: {
+        clave: fuente === 'ia' ? iaKey : localKey,
+        valor: String((fuente === 'ia' ? iaActual : localActual) + 1),
+        descripcion: fuente === 'ia' ? 'Usos con IA generativa (LLM)' : 'Usos con motor de reglas local',
+      },
+    }),
+  ]);
+}
+
+export async function obtenerUsoIA() {
+  const [totalPref, iaPref] = await Promise.all([
+    prisma.preferenciaSistema.findUnique({ where: { clave: 'ia_uso_total' } }),
+    prisma.preferenciaSistema.findUnique({ where: { clave: 'ia_uso_ia' } }),
+  ]);
+  const total = totalPref ? parseInt(totalPref.valor, 10) : 0;
+  const iaCount = iaPref ? parseInt(iaPref.valor, 10) : 0;
+  const porcentaje = total > 0 ? Math.round((iaCount / total) * 100) : 0;
+  return { total, iaCount, localCount: total - iaCount, porcentaje };
 }
 
 // ── Panel de alertas de riesgo (sin servicios externos) ──────

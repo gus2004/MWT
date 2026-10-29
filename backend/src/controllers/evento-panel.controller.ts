@@ -61,3 +61,61 @@ export async function getResultados(req: Request, res: Response) {
     return handleError(res, err, 'No se pudieron listar los resultados');
   }
 }
+
+export async function exportarHorarioCSV(req: Request, res: Response) {
+  try {
+    const { evento_id } = req.params;
+    const { lineas } = await service.exportarHorarioCSV(evento_id);
+    const csv = lineas.join('\n');
+    const buffer = Buffer.from('\uFEFF' + csv, 'utf8');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="Horario-Evento-${evento_id}.csv"`);
+    return res.status(200).send(buffer);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Error exportando horario CSV.' });
+  }
+}
+
+export async function exportarHorarioExcel(req: Request, res: Response) {
+  try {
+    const { evento_id } = req.params;
+    const excel = await service.exportarHorarioExcel(evento_id);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Horario-Evento-${evento_id}.xlsx"`);
+    res.setHeader('Content-Length', excel.length);
+    return res.status(200).send(excel);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Error exportando horario Excel.' });
+  }
+}
+
+export async function exportarHorarioPDF(req: Request, res: Response) {
+  try {
+    const { evento_id } = req.params;
+    const pdf = await service.exportarHorarioPDF(evento_id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Horario-Evento-${evento_id}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    return res.status(200).send(pdf);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Error exportando horario PDF.' });
+  }
+}
+
+export async function generarHorarioAutomatico(req: Request, res: Response) {
+  try {
+    const { evento_id } = req.params;
+    const { vueltas, vueltas_por_categoria, fecha_evento, hora_inicio, mangas, duracion_por_heat } = req.body || {};
+    const data = await service.generarHorarioAutomatico(evento_id, {
+      vueltas: vueltas ? Number(vueltas) : undefined,
+      vueltasPorCategoria: vueltas_por_categoria,
+      fechaEvento: fecha_evento || undefined,
+      horaInicio: hora_inicio || undefined,
+      mangas: mangas ? Number(mangas) : undefined,
+      duracionPorHeat: duracion_por_heat ? Number(duracion_por_heat) : undefined,
+    });
+    return res.status(200).json(data);
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Error generando horario automático.' });
+  }
+}

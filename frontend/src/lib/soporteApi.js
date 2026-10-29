@@ -147,6 +147,7 @@ export const soporteApi = {
   listReglamentoDocumentos: () => request("/api/soporte/reglamento/documentos").then((d) => d?.items || []),
   borrarReglamentoPdf: (eventoId) => request(`/api/soporte/reglamento/pdf/${eventoId}`, { method: "DELETE" }),
   alertasIA: () => request("/api/soporte/ia/alertas").then((d) => d?.items || []),
+  usoIA: () => request("/api/soporte/ia/uso").then((d) => d || { total: 0, iaCount: 0, localCount: 0, porcentaje: 0 }),
 
   // Catálogo del reglamento (alimenta la sugerencia de artículo de la IA)
   listReglamento: () => request("/api/soporte/reglamento").then((d) => d?.items || []),

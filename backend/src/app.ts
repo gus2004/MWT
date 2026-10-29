@@ -5,8 +5,24 @@ import routes from './routes';
 
 const app = express();
 
-// Allow cross-origin requests with credentials so frontend can send auth cookie
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS origin not allowed: ${origin}`));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
 

@@ -65,6 +65,7 @@ export async function listarArbolSeries() {
       count_fechas: c.eventos.length,
       fechas: c.eventos.map((ev) => ({
         id: ev.id,
+        campeonato_id: c.id,
         nombre: ev.nombre,
         fecha_inicio: ev.fecha_inicio,
         fecha_fin: ev.fecha_fin,

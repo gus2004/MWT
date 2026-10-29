@@ -80,6 +80,7 @@ export default function EventosPage() {
   const [cronograma, setCronograma] = useState([]);
   const [cronogramaModal, setCronogramaModal] = useState(null);
   const [cronogramaLoading, setCronogramaLoading] = useState(false);
+  const [cronogramaArrastrando, setCronogramaArrastrando] = useState(null);
 
   // Categorías del evento (serie)
   const [categoriasDe, setCategoriasDe] = useState(null);
@@ -410,6 +411,36 @@ export default function EventosPage() {
     }
   };
 
+  const moverActividadCronograma = async (indiceDestino) => {
+    if (cronogramaArrastrando === null || cronogramaArrastrando === indiceDestino || !cronogramaDe) return;
+    const orden = [...cronograma];
+    const [movida] = orden.splice(cronogramaArrastrando, 1);
+    orden.splice(indiceDestino, 0, movida);
+    const posiciones = cronograma.map((act) => ({
+      inicio: new Date(act.hora_inicio),
+    }));
+    const actualizadas = orden.map((act, posicion) => {
+      const duracion = new Date(act.hora_fin).getTime() - new Date(act.hora_inicio).getTime();
+      const inicio = posiciones[posicion].inicio;
+      return { ...act, hora_inicio: inicio.toISOString(), hora_fin: new Date(inicio.getTime() + duracion).toISOString() };
+    });
+    setCronograma(actualizadas);
+    try {
+      await Promise.all(actualizadas.map((act) => fetch(`${API_URL}/api/eventos/${cronogramaDe.id}/cronograma/${act.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ hora_inicio: act.hora_inicio, hora_fin: act.hora_fin }),
+      }).then(async (res) => {
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || `HTTP ${res.status}`);
+      })));
+    } catch (err) {
+      setError(err?.message || "No se pudo guardar el nuevo orden del cronograma.");
+      abrirCronograma(cronogramaDe);
+    } finally {
+      setCronogramaArrastrando(null);
+    }
+  };
+
   // ---------------- Categorías del evento (serie) ----------------
 
   const abrirCategorias = async (serie) => {
@@ -535,10 +566,19 @@ export default function EventosPage() {
 
   // ---------------- Render helpers ----------------
 
-  const cronogramaItems = cronograma.map((act) => (
-    <div key={act.id} className="flex items-center justify-between gap-3 rounded-[12px] border border-border p-3 hover:bg-muted/50 transition-colors">
+  const cronogramaItems = cronograma.map((act, indice) => (
+    <div
+      key={act.id}
+      draggable
+      onDragStart={() => setCronogramaArrastrando(indice)}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={() => moverActividadCronograma(indice)}
+      onDragEnd={() => setCronogramaArrastrando(null)}
+      className={`flex items-center justify-between gap-3 rounded-[12px] border border-border p-3 hover:bg-muted/50 transition-colors cursor-grab active:cursor-grabbing ${cronogramaArrastrando === indice ? "opacity-40" : ""}`}
+    >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
+          <span className="text-slate-400 text-lg" title="Arrastrar para reordenar">☷</span>
           <div className="w-8 h-8 rounded-[8px] bg-blue-600/10 text-blue-600 flex items-center justify-center shrink-0"><Clock size={14} /></div>
           <div className="min-w-0">
             <div className="text-sm font-bold text-foreground truncate">{act.nombre}</div>

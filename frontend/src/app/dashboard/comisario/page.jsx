@@ -36,6 +36,7 @@ export default function ComisarioPage() {
   const [auditoria, setAuditoria] = useState([]);
   const [alertas, setAlertas] = useState([]);  const [tipos, setTipos] = useState([]);
   const [inscripciones, setInscripciones] = useState([]);
+  const [usoIA, setUsoIA] = useState({ total: 0, iaCount: 0, localCount: 0, porcentaje: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -55,7 +56,9 @@ export default function ComisarioPage() {
   const [docReglamentos, setDocReglamentos] = useState([]);
   const [regSaving, setRegSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
-  // Checklist de inspección mecánica: filtros de la lista de pilotos
+  // Checklist de inspección mecánica: desglose evento → categoría → búsqueda
+  const [revEvento, setRevEvento] = useState("");
+  const [revCategoria, setRevCategoria] = useState("");
   const [revBusq, setRevBusq] = useState("");
   const [revEstadoF, setRevEstadoF] = useState("todos");
   const [eventoFiltro, setEventoFiltro] = useState("todos"); // "todos" | id de evento
@@ -69,7 +72,7 @@ export default function ComisarioPage() {
     setLoading(true);
     setError("");
     try {
-      const [s, a, r, it, au, tp, ins, al, rg, docr] = await Promise.all([
+      const [s, a, r, it, au, tp, ins, al, rg, docr, uso] = await Promise.all([
         soporteApi.listSanciones().catch(() => []),
         soporteApi.listApelaciones().catch(() => []),
         soporteApi.listRevisionesTecnicas().catch(() => []),
@@ -80,6 +83,7 @@ export default function ComisarioPage() {
         soporteApi.alertasIA().catch(() => []),
         soporteApi.listReglamento().catch(() => []),
         soporteApi.listReglamentoDocumentos().catch(() => []),
+        soporteApi.usoIA().catch(() => ({ total: 0, iaCount: 0, localCount: 0, porcentaje: 0 })),
       ]);
       setSanciones(s);
       setApelaciones(a);
@@ -91,6 +95,7 @@ export default function ComisarioPage() {
       setAlertas(al);
       setReglamento(rg);
       setDocReglamentos(docr);
+      setUsoIA(uso);
     } catch (err) {
       setError(err?.message || "No se pudieron cargar los datos del comisariato.");
     } finally {
@@ -127,11 +132,49 @@ export default function ComisarioPage() {
     [revisiones, eventoFiltro],
   );
 
-  // Lista del checklist de inspección con su propio filtro de búsqueda/estado
+  // ── Desglose del checklist: eventos con sus pilotos y categorías ──
+  // El desglose evita ver los pilotos de todos los eventos a la vez.
+  const revEventosOps = useMemo(() => {
+    const map = new Map();
+    (revisiones || []).forEach((r) => {
+      const e = r.inscripcion?.evento;
+      if (!e?.id) return;
+      const x = map.get(e.id) || { id: e.id, nombre: e.nombre || "Evento", total: 0 };
+      x.total += 1;
+      map.set(e.id, x);
+    });
+    return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [revisiones]);
+
+  // Al cambiar el evento gestionado del módulo, el checklist se re-encuadra:
+  // si hay un evento seleccionado arriba se usa ese; si es "todos", pide elegir.
+  useEffect(() => {
+    setRevEvento(eventoFiltro !== "todos" ? eventoFiltro : "");
+    setRevCategoria("");
+  }, [eventoFiltro]);
+
+  const revisionesEvento = useMemo(
+    () => (revEvento ? (revisiones || []).filter((r) => r.inscripcion?.evento?.id === revEvento) : []),
+    [revisiones, revEvento],
+  );
+
+  const revCategoriasOps = useMemo(() => {
+    const map = new Map();
+    revisionesEvento.forEach((r) => {
+      const c = r.inscripcion?.categoria?.nombre || "Sin categoría";
+      map.set(c, (map.get(c) || 0) + 1);
+    });
+    return [...map.entries()]
+      .map(([nombre, total]) => ({ nombre, total }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [revisionesEvento]);
+
+  // Lista del checklist con búsqueda, categoría y estado
   const revisionesCheckF = useMemo(() => {
     const q = revBusq.trim().toLowerCase();
-    return (revisionesF || []).filter((rev) => {
+    return (revisionesEvento || []).filter((rev) => {
       if (revEstadoF !== "todos" && rev.estado !== revEstadoF) return false;
+      if (revCategoria && (rev.inscripcion?.categoria?.nombre || "Sin categoría") !== revCategoria) return false;
       if (!q) return true;
       const nombre = `${rev.inscripcion?.piloto?.usuario?.nombre || ""} ${rev.inscripcion?.piloto?.usuario?.apellido || ""}`.toLowerCase();
       const dorsal = String(rev.inscripcion?.dorsal_asignado ?? "");
@@ -139,7 +182,28 @@ export default function ComisarioPage() {
       const moto = `${rev.inscripcion?.motocicleta?.marca?.nombre || ""} ${rev.inscripcion?.motocicleta?.modelo || ""}`.toLowerCase();
       return nombre.includes(q) || dorsal.includes(q) || categoria.includes(q) || moto.includes(q);
     });
-  }, [revisionesF, revBusq, revEstadoF]);
+  }, [revisionesEvento, revCategoria, revBusq, revEstadoF]);
+
+  // Filas de la tabla: cabecera de grupo por categoría + sus pilotos ordenados por dorsal
+  const revisionesFilas = useMemo(() => {
+    const grupos = new Map();
+    revisionesCheckF.forEach((rev) => {
+      const c = rev.inscripcion?.categoria?.nombre || "Sin categoría";
+      if (!grupos.has(c)) grupos.set(c, []);
+      grupos.get(c).push(rev);
+    });
+    const filas = [];
+    let indice = 0;
+    [...grupos.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([categoria, items]) => {
+        filas.push({ tipo: "grupo", categoria, total: items.length });
+        items
+          .sort((a, b) => (Number(a.inscripcion?.dorsal_asignado) || 0) - (Number(b.inscripcion?.dorsal_asignado) || 0))
+          .forEach((rev) => filas.push({ tipo: "fila", rev, zona: indice++ % 2 }));
+      });
+    return filas;
+  }, [revisionesCheckF]);
 
   const kpisF = useMemo(() => {
     const evidencias = (sancionesF || []).reduce((acc, s) => acc + (s.evidencias?.length || 0), 0);
@@ -369,19 +433,26 @@ export default function ComisarioPage() {
     }
   };
 
-  // ── Checklist de inspección mecánica: verificación rápida por piloto ──
-  // Checked = pasó la inspección (APROBADA). Un-check de una aprobada la
-  // convierte en rechazada; desmarcar una pendiente no hace nada.
-  const marcarRevision = async (rev, paso) => {
-    if (paso && rev.estado === "APROBADA") return;
-    if (!paso && rev.estado !== "APROBADA") return;
+  // ── Checklist de inspección mecánica: una casilla de 4 estados ──
+  // Cada clic avanza el ciclo:
+  //   vacío (PENDIENTE) → verde ✓ (APROBADA) → rojo ✕ (RECHAZADA) → azul ~ (CONDICIONAL) → vacío…
+  const ORDEN_REVISION = ["PENDIENTE", "APROBADA", "RECHAZADA", "CONDICIONAL"];
+  const AVISO_REVISION = {
+    PENDIENTE: "Inspección mecánica: sin verificar (pendiente).",
+    APROBADA: "Inspección mecánica: PASÓ (aprobada).",
+    RECHAZADA: "Inspección mecánica: NO PASÓ (rechazada).",
+    CONDICIONAL: "Inspección mecánica: condicional (requiere seguimiento).",
+  };
+  const ciclarRevision = async (rev) => {
+    if (saving) return;
+    const idx = ORDEN_REVISION.indexOf(rev.estado);
+    const nuevoEstado = ORDEN_REVISION[(idx + 1) % ORDEN_REVISION.length];
     setSaving(true);
     setError("");
     try {
-      const nuevoEstado = paso ? "APROBADA" : "RECHAZADA";
       await soporteApi.updateRevisionTecnica(rev.id, { estado: nuevoEstado, observaciones: rev.observaciones || "" });
       setRevisiones((rs) => rs.map((x) => (x.id === rev.id ? { ...x, estado: nuevoEstado } : x)));
-      setNotice(paso ? "Inspección mecánica: el piloto PASÓ (aprobada)." : "Inspección mecánica: el piloto NO PASÓ (rechazada).");
+      setNotice(AVISO_REVISION[nuevoEstado]);
       setTimeout(() => setNotice(""), 3000);
     } catch (err) {
       setError(err?.message || "No se pudo actualizar la inspección.");
@@ -480,6 +551,7 @@ export default function ComisarioPage() {
         <Kpi label="Evidencias" value={kpisF.evidencias} sub="imágenes y videos" accent="cyan" />
         <Kpi label="Banderas/Alertas IA" value={alertas.length} sub="patrones de riesgo" accent="blue" />
         <Kpi label="Artículos reglamento" value={reglamento.length} sub="fuente de la IA" accent="green" />
+        <Kpi label="Uso de IA" value={usoIA.porcentaje} sub={`${usoIA.iaCount}/${usoIA.total} consultas IA`} accent="indigo" />
       </div>
 
       <Tabs
@@ -609,19 +681,45 @@ export default function ComisarioPage() {
           <div className="rounded-[14px] border border-blue-400/30 bg-blue-500/5 p-4 flex items-start gap-3">
             <Shield size={16} className="text-blue-500 mt-0.5 shrink-0" />
             <p className="text-xs text-slate-500 leading-relaxed">
-              <strong className="text-foreground">Checklist de inspección mecánica.</strong> Marca el check del piloto que <strong className="text-foreground">pasó la inspección</strong>; desmárcalo si no pasa (queda rechazada). La lista obedece al evento gestionado y a los filtros.
+              <strong className="text-foreground">Checklist de inspección mecánica.</strong> La casilla tiene <strong className="text-foreground">4 estados</strong>: cada clic avanza vacío (pendiente) → <span className="text-emerald-600 font-bold">verde ✓ aprobado</span> → <span className="text-red-600 font-bold">rojo ✕ rechazado</span> → <span className="text-blue-600 font-bold">azul ~ condicional</span> → vacío. El desglose <strong className="text-foreground">evento → categoría → búsqueda</strong> mantiene la lista corta y separada por categoría.
             </p>
           </div>
 
-          {/* FILTROS + RESUMEN */}
-          <div className="rounded-[14px] border border-border bg-card p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-center">
+          {/* DESGLOSE + FILTROS: 1· evento → 2· categoría → 3· búsqueda */}
+          <div className="rounded-[14px] border border-border bg-card p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.4fr_1.1fr_1fr_0.85fr] gap-2.5">
+            <select
+              className={selectCls}
+              value={revEvento}
+              onChange={(e) => {
+                setRevEvento(e.target.value);
+                setRevCategoria("");
+              }}
+            >
+              <option value="">1 · Evento — elige uno</option>
+              {revEventosOps.map((ev) => (
+                <option key={ev.id} value={ev.id}>1 · {ev.nombre} ({ev.total})</option>
+              ))}
+            </select>
+            <select
+              className={selectCls}
+              value={revCategoria}
+              disabled={!revEvento}
+              onChange={(e) => setRevCategoria(e.target.value)}
+            >
+              <option value="">2 · Todas las categorías</option>
+              {revEvento ? revCategoriasOps.map((c) => (
+                <option key={c.nombre} value={c.nombre}>2 · {c.nombre} ({c.total})</option>
+              )) : null}
+            </select>
             <input
               className={inputCls}
               value={revBusq}
               onChange={(e) => setRevBusq(e.target.value)}
-              placeholder="Filtrar por nombre, dorsal, categoría o moto…"
+              placeholder="3 · Buscar piloto…"
+              title="Buscar por nombre, dorsal, categoría o moto"
+              disabled={!revEvento}
             />
-            <select className={selectCls} value={revEstadoF} onChange={(e) => setRevEstadoF(e.target.value)}>
+            <select className={selectCls} value={revEstadoF} onChange={(e) => setRevEstadoF(e.target.value)} disabled={!revEvento}>
               <option value="todos">Todos los estados</option>
               <option value="PENDIENTE">sin verificar (pendiente)</option>
               <option value="APROBADA">pasaron ✓</option>
@@ -629,62 +727,127 @@ export default function ComisarioPage() {
               <option value="CONDICIONAL">condicional</option>
             </select>
           </div>
-          <div className="flex items-center gap-2 flex-wrap text-[10px] font-black uppercase tracking-widest">
-            <Badge variant="gray">{revisionesF.filter((r) => r.estado === "PENDIENTE").length} sin verificar</Badge>
-            <Badge variant="success">{revisionesF.filter((r) => r.estado === "APROBADA").length} pasaron</Badge>
-            <Badge variant="error">{revisionesF.filter((r) => r.estado === "RECHAZADA").length} no pasaron</Badge>
-            <Badge variant="cyan">{revisionesCheckF.length} en lista</Badge>
-          </div>
 
-          {/* CHECKLIST DE PILOTOS */}
-          {revisionesF.length === 0 ? (
-            <Empty title="Sin pilotos que inspeccionar" sub={eventoFiltro === "todos" ? "El checklist se llena con las inscripciones de cada evento." : "Este evento no tiene pilotos inscritos todavía."} />
-          ) : revisionesCheckF.length === 0 ? (
-            <Empty title="Nadie con esos filtros" sub="Ajusta la búsqueda o el estado en la lista del checklist." />
-          ) : (
-            <div className="bg-card border border-border rounded-[14px] overflow-hidden">
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="text-[9px] uppercase tracking-widest text-slate-400 border-b border-border bg-muted/40">
-                    <th className="text-center py-2.5 px-3 w-16">Pasó</th>
-                    <th className="text-left py-2.5 px-3 w-14">Dorsal</th>
-                    <th className="text-left py-2.5 px-3">Piloto</th>
-                    <th className="text-left py-2.5 px-3 hidden md:table-cell">Categoría</th>
-                    <th className="text-left py-2.5 px-3 hidden lg:table-cell">Moto</th>
-                    <th className="text-left py-2.5 px-3 hidden sm:table-cell">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {revisionesCheckF.map((rev, i) => {
-                    const paso = rev.estado === "APROBADA";
-                    const [bv, bl] = EST_REVISION[rev.estado] || EST_REVISION.PENDIENTE;
-                    const nombre = rev.inscripcion?.piloto?.usuario
-                      ? `${rev.inscripcion.piloto.usuario.nombre} ${rev.inscripcion.piloto.usuario.apellido}`.trim()
-                      : "—";
-                    return (
-                      <tr key={rev.id} className={`border-b border-border/60 ${i % 2 === 0 ? "bg-card" : "bg-[#EDF4FF]/40"}`}>
-                        <td className="text-center py-2.5 px-3">
-                          <input
-                            type="checkbox"
-                            checked={paso}
-                            onChange={(e) => marcarRevision(rev, e.target.checked)}
-                            title={paso ? "Pasó la inspección (desmarca para rechazar)" : "Marcar que pasó la inspección"}
-                            className="w-4 h-4 accent-emerald-500 cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-2.5 px-3 font-black text-foreground">#{rev.inscripcion?.dorsal_asignado || "—"}</td>
-                        <td className="py-2.5 px-3 font-bold text-foreground">{nombre}</td>
-                        <td className="py-2.5 px-3 text-slate-500 hidden md:table-cell">{rev.inscripcion?.categoria?.nombre || "—"}</td>
-                        <td className="py-2.5 px-3 text-slate-500 hidden lg:table-cell">
-                          {rev.inscripcion?.motocicleta?.marca?.nombre || ""} {rev.inscripcion?.motocicleta?.modelo || ""}
-                        </td>
-                        <td className="py-2.5 px-3 hidden sm:table-cell"><Badge variant={bv}>{bl}</Badge></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {!revEvento ? (
+            /* Paso 1: elegir el evento; los pilotos no se muestran todos juntos */
+            <div className="rounded-[14px] border border-dashed border-border bg-card p-5">
+              <div className="text-center">
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-foreground">Paso 1 · elige el evento a inspeccionar</p>
+                <p className="text-[11px] text-slate-500 mt-1">La lista mostrará únicamente los pilotos de ese evento, agrupados por categoría.</p>
+              </div>
+              {revEventosOps.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center mt-4">No hay pilotos inscritos para inspeccionar todavía.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
+                  {revEventosOps.map((ev) => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      onClick={() => setRevEvento(ev.id)}
+                      className="text-left rounded-[10px] border border-border bg-background px-3 py-2.5 transition-colors hover:border-blue-400/60 hover:bg-blue-500/5"
+                    >
+                      <span className="block text-[11px] font-black text-foreground truncate">{ev.nombre}</span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">{ev.total} piloto(s) por inspeccionar</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 flex-wrap text-[10px] font-black uppercase tracking-widest">
+                <Badge variant="gray">{revisionesEvento.filter((r) => r.estado === "PENDIENTE").length} sin verificar</Badge>
+                <Badge variant="success">{revisionesEvento.filter((r) => r.estado === "APROBADA").length} pasaron</Badge>
+                <Badge variant="error">{revisionesEvento.filter((r) => r.estado === "RECHAZADA").length} no pasaron</Badge>
+                <Badge variant="blue">{revisionesEvento.filter((r) => r.estado === "CONDICIONAL").length} condicional</Badge>
+                <Badge variant="cyan">{revisionesCheckF.length} en lista</Badge>
+              </div>
+
+              {/* Leyenda del ciclo de la casilla */}
+              <div className="rounded-[14px] border border-border bg-card px-4 py-2.5 flex items-center gap-4 flex-wrap text-[10px] font-bold text-slate-500">
+                <span className="uppercase tracking-widest text-slate-400">Clic en la casilla:</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded-[4px] border-2 border-slate-400 inline-block" /> pendiente</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded-[4px] bg-emerald-500 border-2 border-emerald-600 text-white grid place-items-center text-[10px] leading-none">✓</span> aprobado</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded-[4px] bg-red-500 border-2 border-red-600 text-white grid place-items-center text-[10px] leading-none">✕</span> rechazado</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 h-4 rounded-[4px] bg-blue-500 border-2 border-blue-600 text-white grid place-items-center text-[10px] leading-none">~</span> condicional</span>
+              </div>
+
+              {/* CHECKLIST DE PILOTOS — una sección por categoría */}
+              {revisionesCheckF.length === 0 ? (
+                <Empty title="Nadie con esos filtros" sub="Ajusta la categoría, la búsqueda o el estado en el desglose." />
+              ) : (
+                <div className="bg-card border border-border rounded-[14px] overflow-hidden">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="text-[9px] uppercase tracking-widest text-slate-400 border-b border-border bg-muted/40">
+                        <th className="text-center py-2.5 px-3 w-20">Inspección</th>
+                        <th className="text-left py-2.5 px-3 w-14">Dorsal</th>
+                        <th className="text-left py-2.5 px-3">Piloto</th>
+                        <th className="text-left py-2.5 px-3 hidden md:table-cell">Categoría</th>
+                        <th className="text-left py-2.5 px-3 hidden lg:table-cell">Moto</th>
+                        <th className="text-left py-2.5 px-3 hidden sm:table-cell">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revisionesFilas.map((f) => {
+                        if (f.tipo === "grupo") {
+                          return (
+                            <tr key={`grupo-${f.categoria}`} className="bg-muted/60 border-b border-border">
+                              <td colSpan={6} className="px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">
+                                {f.categoria} <span className="text-slate-400">· {f.total} piloto(s)</span>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        const rev = f.rev;
+                        const [bv, bl] = EST_REVISION[rev.estado] || EST_REVISION.PENDIENTE;
+                        const estiloCasilla = {
+                          PENDIENTE: "border-slate-400 bg-transparent text-transparent",
+                          APROBADA: "border-emerald-600 bg-emerald-500 text-white",
+                          RECHAZADA: "border-red-600 bg-red-500 text-white",
+                          CONDICIONAL: "border-blue-600 bg-blue-500 text-white",
+                        }[rev.estado] || "border-slate-400 bg-transparent text-transparent";
+                        const glifoCasilla = { APROBADA: "✓", RECHAZADA: "✕", CONDICIONAL: "~" }[rev.estado] || "";
+                        const siguiente = {
+                          PENDIENTE: "aprobado",
+                          APROBADA: "rechazado",
+                          RECHAZADA: "condicional",
+                          CONDICIONAL: "pendiente",
+                        }[rev.estado] || "aprobado";
+                        const nombre = rev.inscripcion?.piloto?.usuario
+                          ? `${rev.inscripcion.piloto.usuario.nombre} ${rev.inscripcion.piloto.usuario.apellido}`.trim()
+                          : "—";
+                        return (
+                          <tr key={rev.id} className={`border-b border-border/60 ${f.zona === 0 ? "bg-card" : "bg-[#EDF4FF]/40"}`}>
+                            <td className="text-center py-2.5 px-3">
+                              <button
+                                type="button"
+                                role="checkbox"
+                                aria-checked={rev.estado === "APROBADA"}
+                                aria-label={`Inspección de ${nombre}: ${bl}. Un clic para marcar ${siguiente}.`}
+                                onClick={() => ciclarRevision(rev)}
+                                disabled={saving}
+                                title={`${bl} · un clic → ${siguiente}`}
+                                className={`w-4 h-4 rounded-[4px] border-2 grid place-items-center text-[10px] font-black leading-none cursor-pointer transition-colors disabled:opacity-60 ${estiloCasilla}`}
+                              >
+                                {glifoCasilla}
+                              </button>
+                            </td>
+                            <td className="py-2.5 px-3 font-black text-foreground">#{rev.inscripcion?.dorsal_asignado || "—"}</td>
+                            <td className="py-2.5 px-3 font-bold text-foreground">{nombre}</td>
+                            <td className="py-2.5 px-3 text-slate-500 hidden md:table-cell">{rev.inscripcion?.categoria?.nombre || "—"}</td>
+                            <td className="py-2.5 px-3 text-slate-500 hidden lg:table-cell">
+                              {rev.inscripcion?.motocicleta?.marca?.nombre || ""} {rev.inscripcion?.motocicleta?.modelo || ""}
+                            </td>
+                            <td className="py-2.5 px-3 hidden sm:table-cell"><Badge variant={bv}>{bl}</Badge></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : null}

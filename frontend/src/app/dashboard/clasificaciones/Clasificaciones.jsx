@@ -767,7 +767,7 @@ export default function Clasificaciones() {
                 hora={officialEventMeta.hora}
                 logoIzquierdaUrl={null}
                 logoDerechaUrl={null}
-                maxRows={20}
+                maxRows={officialRows.length || 1}
               />
             ) : (
               <div style={{ color: "#64748b", padding: "20px", background: "rgba(148,163,184,0.06)", borderRadius: 8, border: "1px dashed rgba(148,163,184,0.2)" }}>

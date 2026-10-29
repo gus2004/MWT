@@ -14,6 +14,7 @@ import {
   getReporteResumen,
   iaAlertasRiesgo,
   iaCalificarIncidencia,
+  iaUsoPorcentaje,
   listApelaciones,
   listAuditoria,
   listEvidencias,
@@ -45,6 +46,7 @@ router.use(authRequired);
 // Asistente IA del comisariato (IA generativa con respaldo local)
 router.post('/ia/calificar', requireRoles('ADMIN', 'COMISARIO', 'JUEZ_MESA'), iaCalificarIncidencia);
 router.get('/ia/alertas', iaAlertasRiesgo);
+router.get('/ia/uso', iaUsoPorcentaje);
 
 router.get('/sanciones', listSanciones);
 router.post('/sanciones', requireRoles('ADMIN', 'COMISARIO', 'JUEZ_MESA'), createSancion);
