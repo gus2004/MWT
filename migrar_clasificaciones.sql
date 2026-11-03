@@ -1,0 +1,21 @@
+﻿CREATE TEMP TABLE clasificaciones_importadas
+(LIKE public.clasificaciones_generales INCLUDING DEFAULTS);
+
+COPY clasificaciones_importadas (id, piloto_id, categoria_id, campeonato_id, puntos_total, posicion, actualizado_en) FROM stdin;
+ecc5eba8-471a-4aaf-8d02-058b428e9bfb	8a1739f2-9806-42fe-b4ef-a645205b7a8a	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	1	2026-10-29 01:48:09.923
+77d8203a-b6b6-4910-a8ea-f22f82667f02	pil-19	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	2	2026-10-29 01:48:10.063
+fb71c0d7-6430-4f05-b219-f344bb61faf2	pil-17	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	3	2026-10-29 01:48:10.146
+016a622c-e164-44e4-bc1c-02c70c0b12c5	pil-18	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	5	2026-10-29 01:48:10.295
+c6930439-c9ae-4458-861d-3022e6ad2ab8	pil-16	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	6	2026-10-29 01:48:10.362
+995c6030-42f1-446f-a7fd-6b7a8b64f9ab	64f057d8-6294-4f8e-8628-63f35d5d829a	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	7	2026-10-29 01:48:10.418
+97d7edff-f2c2-4bed-8478-e0ea2b9a9179	pil-10	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	1	2026-10-29 01:58:44.162
+ff382353-9674-49f0-97a6-7a2144d2eae9	82f8ae7a-fa73-4b0a-9313-f001a94ae9cf	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	2	2026-10-29 01:58:44.237
+65515d89-df85-4b15-9942-d847bae4260e	pil-20	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	3	2026-10-29 01:58:44.304
+f53dec89-285d-4522-91cb-e21e04d7b93b	0594deec-173b-4877-a8b0-d3049ccdc238	a25afd04-daaa-41d6-9074-048dba75fc93	02e6b00c-dd46-44df-bd42-8c38494ab748	0	4	2026-10-29 01:58:44.367
+\.
+
+
+INSERT INTO public.clasificaciones_generales
+SELECT *
+FROM clasificaciones_importadas
+ON CONFLICT DO NOTHING;
