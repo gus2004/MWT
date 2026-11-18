@@ -1,6 +1,5 @@
-import { PrismaClient, EstadoInscripcion } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { EstadoInscripcion } from "@prisma/client";
+import prisma from "../../prisma.config";
 
 type CreateInscripcionInput = {
   evento_id?: string;

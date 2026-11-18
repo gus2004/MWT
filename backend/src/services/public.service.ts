@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../../prisma.config";
 
 export async function getPublicEventos(limit = 4) {
   const take = Number.isFinite(limit) ? Math.max(1, Math.min(limit, 20)) : 4;

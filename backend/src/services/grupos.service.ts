@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../../prisma.config';
 
 const P2002_MESSAGE = 'Ya existe un registro con ese valor, verifica los datos';
@@ -15,43 +16,44 @@ export async function crearGrupo(eventoId: string, payload: any, operadorId: str
     if (c.campeonato_id !== evento.campeonato_id) throw new Error('Todas las categorías deben pertenecer al mismo campeonato del evento');
   }
 
-  // Validate none of categories already assigned to other group in this event
-  const yaAsignadas = await (prisma as any).categoriaEnGrupo.findMany({
-    where: { categoria_id: { in: categorias_ids } },
-    include: { grupo: { where: { evento_id: eventoId } } },
+  // Validate none of categories already assigned to another group in this event
+  const yaAsignadas = await prisma.categoriaEnGrupo.findMany({
+    where: {
+      categoria_id: { in: categorias_ids },
+      grupo: { evento_id: eventoId },
+    },
+    select: { categoria_id: true },
   });
-  // Note: the include above may not filter as intended; instead query joined groups
-  const asignadasDirect = await prisma.$queryRaw`
-    SELECT ceg.categoria_id FROM categorias_en_grupo ceg
-    JOIN grupos_categoria_evento g ON g.id = ceg.grupo_id
-    WHERE g.evento_id = ${eventoId} AND ceg.categoria_id = ANY(${categorias_ids})
-  `;
-  if (Array.isArray(asignadasDirect) && asignadasDirect.length > 0) {
+  if (yaAsignadas.length > 0) {
     throw new Error('Alguna categoría ya está asignada a otro grupo en este evento');
   }
 
   try {
-    const created = await (prisma.$transaction as any)(async (tx: any) => {
-      const grupo = await tx.grupoCategoriaEvento.create({
+    // Prisma 3.15 only supports the array form of $transaction. The id is
+    // generated here so the group and its categories are created atomically.
+    const grupoId = randomUUID();
+    await prisma.$transaction([
+      prisma.grupoCategoriaEvento.create({
         data: {
+          id: grupoId,
           nombre: nombre.trim(),
           descripcion: descripcion?.trim() || null,
           tiene_clasificacion: !!tiene_clasificacion,
           orden: Number(orden) || 1,
           evento_id: eventoId,
         },
-      });
+      }),
+      ...categorias_ids.map((categoriaId: string) =>
+        prisma.categoriaEnGrupo.create({
+          data: { grupo_id: grupoId, categoria_id: categoriaId },
+        })
+      ),
+    ]);
 
-      for (const categoriaId of categorias_ids) {
-        await tx.categoriaEnGrupo.create({
-          data: { grupo_id: grupo.id, categoria_id: categoriaId },
-        });
-      }
-
-      return tx.grupoCategoriaEvento.findUnique({ where: { id: grupo.id }, include: { categorias_en_grupo: { include: { categoria: true } } } });
+    return prisma.grupoCategoriaEvento.findUnique({
+      where: { id: grupoId },
+      include: { categorias_en_grupo: { include: { categoria: true } } },
     });
-
-    return created;
   } catch (err: any) {
     if (err?.code === 'P2002') throw new Error(P2002_MESSAGE);
     throw new Error('No se pudo crear el grupo');

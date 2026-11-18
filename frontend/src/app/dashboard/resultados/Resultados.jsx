@@ -62,6 +62,55 @@ function authHeaders(json = false) {
   };
 }
 
+const groupCreationCache = new Map();
+
+async function createGroupForCategoria(eventoId, categoriaId, payload) {
+  const key = `${eventoId}:${categoriaId}`;
+  if (groupCreationCache.has(key)) return groupCreationCache.get(key);
+
+  const api = process.env.NEXT_PUBLIC_API_URL || "";
+  const task = (async () => {
+    const response = await fetch(`${api}/api/eventos/${eventoId}/panel/grupos`, {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify(payload),
+    });
+    const created = await response.json().catch(() => null);
+    if (response.ok && created?.id) return created;
+
+    // Otra petición (por ejemplo StrictMode o dos pestañas) pudo crear el
+    // grupo primero: se reutiliza el existente en lugar de fallar.
+    const retry = await fetch(`${api}/api/eventos/${eventoId}/panel/grupos`, { headers: authHeaders() });
+    const retryData = await retry.json().catch(() => null);
+    const existing = (Array.isArray(retryData?.items) ? retryData.items : []).find((item) => (
+      (item.categorias || []).some((category) => String(category.id) === String(categoriaId))
+    ));
+    if (existing) return existing;
+    throw new Error(created?.message || "No se pudo crear el grupo de competencia para esta categoría.");
+  })();
+
+  groupCreationCache.set(key, task);
+  try {
+    return await task;
+  } catch (err) {
+    groupCreationCache.delete(key);
+    throw err;
+  }
+}
+
+function normalizeRow(item) {
+  const id = item.inscripcion_id || item.id || "";
+  const nombre = item.piloto?.usuario
+    ? `${item.piloto.usuario.nombre} ${item.piloto.usuario.apellido}`.trim()
+    : item.nombre || item.pilotoNombre || item.piloto || item.piloto_id || "Piloto sin nombre";
+  return {
+    ...item,
+    inscripcion_id: id,
+    nombre,
+    dorsal: item.dorsal_asignado ?? item.dorsal ?? "",
+  };
+}
+
 export default function Resultados() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -128,7 +177,21 @@ export default function Resultados() {
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.message || "No se pudo cargar el grupo de competencia.");
         const groups = Array.isArray(data?.items) ? data.items : [];
-        const selectedGroup = groups.find((item) => (item.categorias || []).some((category) => String(category.id) === String(selectedCategoria)));
+        let selectedGroup = groups.find((item) => (item.categorias || []).some((category) => String(category.id) === String(selectedCategoria)));
+
+        // La parrilla se construye por grupo de competencia. Si la categoría
+        // todavía no tiene uno, se crea automáticamente para que el módulo
+        // pueda jalar sus inscripciones sin configuración manual previa.
+        if (!selectedGroup) {
+          const categoria = (options.categorias || []).find((item) => String(item.id) === String(selectedCategoria));
+          const evento = (options.eventos || []).find((item) => String(item.id) === String(selectedEvento));
+          selectedGroup = await createGroupForCategoria(selectedEvento, selectedCategoria, {
+            nombre: `${evento?.nombre || "Grupo"} · ${categoria?.nombre || "Categoría"}`,
+            usuario_id: getOperatorId(),
+            categorias_ids: [selectedCategoria],
+          });
+        }
+
         if (!mounted) return;
         setGroup(selectedGroup || null);
         setGroupId(selectedGroup?.id || "");
@@ -139,7 +202,7 @@ export default function Resultados() {
 
     loadGroup();
     return () => { mounted = false; };
-  }, [selectedEvento, selectedCategoria]);
+  }, [selectedEvento, selectedCategoria, options.categorias, options.eventos]);
 
   useEffect(() => {
     let mounted = true;
@@ -164,29 +227,25 @@ export default function Resultados() {
         const inscriptionFallback = inscripciones.filter((item) => (
           String(item.evento_id || item.evento?.id || "") === String(selectedEvento)
           && String(item.categoria_id || item.categoria?.id || "") === String(selectedCategoria)
-        )).map((item) => ({
-          ...item,
-          inscripcion_id: item.id,
-          nombre: item.piloto?.usuario
-            ? `${item.piloto.usuario.nombre} ${item.piloto.usuario.apellido}`.trim()
-            : item.nombre || item.piloto_id || "Piloto",
-          dorsal: item.dorsal_asignado || item.dorsal,
-          fecha_registro: item.fecha_registro,
-        }));
-        setHeatRows({ 1: saved1, 2: saved2 });
+        )).map(normalizeRow);
         const mergeCandidates = (...lists) => {
           const merged = new Map();
           lists.flat().forEach((item) => {
             const id = String(item.inscripcion_id || item.id || "");
             if (id && !merged.has(id)) merged.set(id, item);
           });
-          return Array.from(merged.values());
+          return Array.from(merged.values()).map(normalizeRow);
         };
+        const availableForHeat1 = mergeCandidates(pilots1, inscriptionFallback);
+        const generatedHeat1 = saved1.length ? saved1.map(normalizeRow) : availableForHeat1;
+        setHeatRows({ 1: generatedHeat1, 2: saved2.map(normalizeRow) });
         setHeatSources({
-          1: mergeCandidates(pilots1, inscriptionFallback, saved1),
+          1: mergeCandidates(availableForHeat1, saved1),
           2: mergeCandidates(pilots2, saved2),
         });
-        if (!saved1.length && !saved2.length && pilots1.length) setNotice("Parrilla de Manga 1 lista. Revisa el orden antes de iniciar.");
+        if (!saved1.length && generatedHeat1.length) {
+          setNotice(`Parrilla de Manga 1 generada con ${generatedHeat1.length} inscritos. Revisa el orden antes de iniciar.`);
+        }
         if (group?.heat1_completado && !saved2.length && !pilots2.length) setWarning("La Manga 2 aún no tiene pilotos disponibles.");
       } catch (err) {
         if (mounted) setWarning(err?.message || "No se pudieron cargar las parrillas.");
@@ -234,21 +293,30 @@ export default function Resultados() {
   }, [eventOptions]);
   const categoryOptions = useMemo(() => {
     const source = options.categorias || [];
+    if (!selectedEvento) return source;
+    const selectedEvent = eventOptions.find((evento) => String(evento.id) === String(selectedEvento));
+    const selectedEventId = String(selectedEvento);
+    const selectedChampionshipId = String(selectedEvent?.campeonato_id || selectedEvent?.campeonato?.id || "");
     return source.filter((categoria) => {
-      if (!selectedEvento) return true;
       const categoryEventId = String(categoria.evento_id || categoria.evento?.id || "");
       const categoryChampionshipId = String(categoria.campeonato_id || categoria.campeonato?.id || "");
-      const selectedEvent = eventOptions.find((evento) => String(evento.id) === String(selectedEvento));
-      const selectedChampionshipId = String(selectedEvent?.campeonato_id || selectedEvent?.campeonato?.id || "");
-      return !categoryEventId || categoryEventId === String(selectedEvento) || (selectedChampionshipId && categoryChampionshipId === selectedChampionshipId);
+      // Las categorías pertenecen al campeonato, no al evento. Si el evento
+      // tiene campeonato, solo mostramos sus categorías para no mezclar
+      // categorías homónimas de otras series (que no tienen inscritos).
+      if (selectedChampionshipId) return !categoryChampionshipId || categoryChampionshipId === selectedChampionshipId;
+      if (categoryEventId) return categoryEventId === selectedEventId;
+      return true;
     });
   }, [options.categorias, eventOptions, selectedEvento]);
 
   useEffect(() => {
-    if (!selectedCategoria && categoryOptions.length) {
-      setSelectedCategoria(String(categoryOptions[0].id));
-    }
-  }, [categoryOptions, selectedCategoria]);
+    if (selectedCategoria || !categoryOptions.length) return;
+    const conInscritos = categoryOptions.find((categoria) => inscripciones.some((item) => (
+      String(item.evento_id || item.evento?.id || "") === String(selectedEvento)
+      && String(item.categoria_id || item.categoria?.id || "") === String(categoria.id)
+    )));
+    setSelectedCategoria(String((conInscritos || categoryOptions[0]).id));
+  }, [categoryOptions, selectedCategoria, inscripciones, selectedEvento]);
 
   const selectedEventRecord = useMemo(() => eventOptions.find((evento) => String(evento.id) === String(selectedEvento)) || null, [eventOptions, selectedEvento]);
   const selectedCategoryRecord = useMemo(() => categoryOptions.find((categoria) => String(categoria.id) === String(selectedCategoria)) || null, [categoryOptions, selectedCategoria]);
@@ -264,6 +332,18 @@ export default function Resultados() {
 
   const handleGenerate = () => {
     if (!selectedEvento || !selectedCategoria) return;
+    if (heat === 3) {
+      setWarning("Selecciona el Heat 1 o el Heat 2 para generar la parrilla.");
+      return;
+    }
+    const rows = (heatSources[heat] || []).map(normalizeRow).filter((row) => row.inscripcion_id);
+    if (!rows.length) {
+      setWarning(`No hay pilotos inscritos disponibles para generar la parrilla del Heat ${heat}.`);
+      return;
+    }
+    setHeatRows((current) => ({ ...current, [heat]: rows }));
+    setWarning("");
+    setNotice(`Parrilla del Heat ${heat} generada con ${rows.length} pilotos. Ajusta el orden y regístrala.`);
   };
 
   const canGenerate = Boolean(selectedEvento && selectedCategoria);
@@ -465,7 +545,7 @@ export default function Resultados() {
           </select>
         </label>
 
-        <button className={styles.generateButton} onClick={() => { handleGenerate(); setHeat(1); }} disabled={!canGenerate}>
+        <button className={styles.generateButton} onClick={handleGenerate} disabled={!canGenerate}>
           Generar parrilla
         </button>
       </section>
